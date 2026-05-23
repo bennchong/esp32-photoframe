@@ -1,0 +1,163 @@
+/**
+ * @file overview.dox
+ * @brief High-level firmware overview and interaction diagrams.
+ */
+
+/**
+ * @mainpage ESP32 PhotoFrame Firmware
+ *
+ * @section overview_overview Overview
+ * The firmware is organized around a small set of components that coordinate
+ * image rotation, user input, power management, and OTA updates. The main entry
+ * point initializes each subsystem, then the runtime loops are driven by
+ * button input, HTTP API requests, periodic tasks, or deep-sleep wakeups.
+ *
+ * @section overview_components Component map
+ * - \ref core
+ * - \ref power
+ * - \ref display
+ * - \ref image_processing
+ * - \ref storage
+ * - \ref network
+ * - \ref webapi
+ * - \ref config
+ * - \ref ota
+ * - \ref integration
+ * - \ref utils
+ *
+ * @section overview_interactions Component interactions
+ * - Rotation triggers flow through @ref utils into @ref image_processing and @ref display.
+ * - Sleep decisions are owned by @ref power and referenced from @ref core and @ref webapi.
+ * - OTA checks are scheduled by @ref core periodic tasks and executed by @ref ota.
+ * - Home Assistant notifications in @ref integration are emitted after state changes.
+ *
+ * @section flow_photo_change Photo change flow
+ *
+ * @subsection flow_photo_change_sequence Sequence diagram
+ * \msc
+ * msc {
+ *   Trigger, PowerMgr, Utils, Config, Fetcher, ImageProc, DisplayMgr, Storage, HA;
+ *   Trigger->PowerMgr [label="reset sleep timer (interactive)"];
+ *   Trigger->Utils [label="trigger_image_rotation()"];
+ *   Utils->Config [label="get rotation mode"];
+ *   Utils->Fetcher [label="URL mode: download image"];
+ *   Fetcher->ImageProc [label="process + dither"];
+ *   ImageProc->Storage [label="write processed image"];
+ *   Utils->DisplayMgr [label="display/rotate from storage"];
+ *   DisplayMgr->Storage [label="read image data"];
+ *   DisplayMgr->DisplayMgr [label="refresh e-paper"];
+ *   Utils->HA [label="ha_notify_update()"];
+ * }
+ * \endmsc
+ *
+ * @subsection flow_photo_change_state State diagram
+ * \dot
+ * digraph photo_change_state {
+ *   rankdir=LR;
+ *   node [shape=ellipse];
+ *   Idle -> "Select Source";
+ *   "Select Source" -> "Fetch Image" [label="URL mode"];
+ *   "Select Source" -> "Select Album Image" [label="SD mode"];
+ *   "Fetch Image" -> "Process Image";
+ *   "Select Album Image" -> "Process Image";
+ *   "Process Image" -> "Display Update";
+ *   "Display Update" -> Idle;
+ *   "Fetch Image" -> "Select Album Image" [label="download failed"];
+ * }
+ * \enddot
+ *
+ * @section flow_button_responses Button response flow
+ *
+ * @subsection flow_button_responses_sequence Sequence diagram
+ * \msc
+ * msc {
+ *   User, ButtonTask, PowerMgr, Utils, DisplayMgr, HA;
+ *   User->ButtonTask [label="press BOOT/ROTATE/CLEAR"];
+ *   ButtonTask->PowerMgr [label="reset_sleep_timer()"];
+ *   ButtonTask->Utils [label="ROTATE: trigger_image_rotation()"];
+ *   Utils->DisplayMgr [label="display update"];
+ *   ButtonTask->DisplayMgr [label="CLEAR: display_manager_clear()"];
+ *   ButtonTask->HA [label="ha_notify_update()"];
+ * }
+ * \endmsc
+ *
+ * @subsection flow_button_responses_state State diagram
+ * \dot
+ * digraph button_state {
+ *   rankdir=LR;
+ *   node [shape=ellipse];
+ *   Idle -> Pressed [label="edge low"];
+ *   Pressed -> Action [label="release 50-3000ms"];
+ *   Action -> Idle;
+ *   Pressed -> Idle [label="ignored/long press"];
+ * }
+ * \enddot
+ *
+ * @section flow_deep_sleep Deep sleep flow
+ *
+ * @subsection flow_deep_sleep_sequence Sequence diagram
+ * \msc
+ * msc {
+ *   Trigger, PowerMgr, WiFi, Storage, BoardHAL, Sleep, Main;
+ *   Trigger->PowerMgr [label="power_manager_enter_sleep()"];
+ *   PowerMgr->WiFi [label="esp_wifi_stop()"];
+ *   PowerMgr->BoardHAL [label="prepare_for_sleep()"];
+ *   PowerMgr->Storage [label="storage_unmount()"];
+ *   PowerMgr->Sleep [label="esp_deep_sleep_start()"];
+ *   Sleep->PowerMgr [label="wake (timer/button)"];
+ *   PowerMgr->Main [label="app_main()/deep_sleep_wake_main()"];
+ * }
+ * \endmsc
+ *
+ * @subsection flow_deep_sleep_state State diagram
+ * \dot
+ * digraph deep_sleep_state {
+ *   rankdir=LR;
+ *   node [shape=ellipse];
+ *   Awake -> "Auto-sleep timer" [label="idle on battery"];
+ *   "Auto-sleep timer" -> "Entering sleep" [label="timeout or /api/sleep"];
+ *   "Entering sleep" -> "Deep sleep";
+ *   "Deep sleep" -> "Wake init" [label="timer/button"];
+ *   "Wake init" -> "Deep-sleep wake flow" [label="timer/rotate"];
+ *   "Wake init" -> Awake [label="boot button/cold boot"];
+ *   "Deep-sleep wake flow" -> "Entering sleep" [label="rotation complete"];
+ * }
+ * \enddot
+ *
+ * @section flow_ota OTA flow
+ *
+ * @subsection flow_ota_sequence Sequence diagram
+ * \msc
+ * msc {
+ *   Trigger, OtaMgr, HttpClient, Flash, PowerMgr, HA;
+ *   Trigger->OtaMgr [label="ota_check_for_update()"];
+ *   OtaMgr->HttpClient [label="fetch GitHub release"];
+ *   OtaMgr->OtaMgr [label="set OTA state"];
+ *   Trigger->OtaMgr [label="ota_start_update()"];
+ *   OtaMgr->PowerMgr [label="reset_sleep_timer()"];
+ *   OtaMgr->HttpClient [label="download firmware"];
+ *   OtaMgr->Flash [label="write + validate"];
+ *   OtaMgr->HA [label="ha_notify_update()"];
+ *   OtaMgr->Flash [label="reboot"];
+ * }
+ * \endmsc
+ *
+ * @subsection flow_ota_state State diagram
+ * \dot
+ * digraph ota_state {
+ *   rankdir=LR;
+ *   node [shape=box];
+ *   Idle -> Checking;
+ *   Checking -> UpdateAvailable [label="new version"];
+ *   Checking -> Idle [label="up to date"];
+ *   Checking -> Error [label="fetch failed"];
+ *   UpdateAvailable -> Downloading [label="ota_start_update()"];
+ *   Downloading -> Installing;
+ *   Installing -> Success;
+ *   Downloading -> Error;
+ *   Installing -> Error;
+ *   Success -> Reboot;
+ *   Error -> Idle [label="retry later"];
+ * }
+ * \enddot
+ */

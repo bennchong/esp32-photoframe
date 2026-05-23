@@ -1,0 +1,16 @@
+PROJECT_NAME           = "ESP32 PhotoFrame"
+PROJECT_BRIEF          = "ESP32 e-paper photo frame firmware"
+OUTPUT_DIRECTORY       = docs/doxygen_output
+INPUT                  = main docs/doxygen
+FILE_PATTERNS          = *.c *.h *.dox
+RECURSIVE              = YES
+EXTRACT_ALL            = YES
+EXTRACT_STATIC         = YES
+OPTIMIZE_OUTPUT_FOR_C  = YES
+GENERATE_LATEX         = NO
+HAVE_DOT               = YES
+DOT_IMAGE_FORMAT       = svg
+DOT_TRANSPARENT        = YES
+MSCGEN_PATH            = mscgen
+WARN_IF_UNDOCUMENTED   = NO
+WARN_IF_DOC_ERROR      = YES
