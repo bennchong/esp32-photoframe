@@ -28,6 +28,9 @@ typedef enum {
 #define HTTP_HEADER_VALUE_MAX_LEN 512
 #define CA_CERT_MAX_LEN 4096
 #define HTTP_ETAG_MAX_LEN 128
+#define LTA_ACCOUNT_KEY_MAX_LEN 256
+#define BUS_STOP_NUMBER_MAX_LEN 16
+#define BUS_SERVICES_MAX_LEN 128
 
 #define DEFAULT_DEVICE_NAME "PhotoFrame"
 #define DEFAULT_WIFI_SSID "PhotoFrame"
@@ -97,6 +100,13 @@ typedef enum {
 #define NVS_HTTP_HEADER_VALUE_KEY "http_hdr_val"
 #define NVS_SAVE_DOWNLOADED_KEY "save_dl"
 #define NVS_IMAGE_ETAG_KEY "image_etag"
+
+// EInk Display - LTA Data Mall
+#define NVS_LTA_ACCOUNT_KEY "lta_key"
+#define NVS_BUS_STOP_NUMBER_KEY "bus_stop"
+#define NVS_BUS_SERVICES_KEY "bus_svcs"
+#define NVS_BUS_TIME_START_KEY "bus_time_s"
+#define NVS_BUS_TIME_END_KEY "bus_time_e"
 
 // Power
 #define NVS_DEEP_SLEEP_KEY "deep_sleep"

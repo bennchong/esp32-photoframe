@@ -100,6 +100,25 @@ void config_manager_set_image_etag(const char *etag);
 const char *config_manager_get_image_etag(void);
 
 // ============================================================================
+// EInk Display - LTA Data Mall
+// ============================================================================
+
+void config_manager_set_lta_account_key(const char *key);
+const char *config_manager_get_lta_account_key(void);
+
+void config_manager_set_bus_stop_number(const char *number);
+const char *config_manager_get_bus_stop_number(void);
+
+void config_manager_set_bus_services(const char *services);
+const char *config_manager_get_bus_services(void);
+
+void config_manager_set_bus_time_start(int minutes);
+int config_manager_get_bus_time_start(void);
+
+void config_manager_set_bus_time_end(int minutes);
+int config_manager_get_bus_time_end(void);
+
+// ============================================================================
 // Home Assistant
 // ============================================================================
 

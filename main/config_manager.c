@@ -45,6 +45,13 @@ static char http_header_value[HTTP_HEADER_VALUE_MAX_LEN] = {0};
 static bool save_downloaded_images = false;
 static char image_etag[HTTP_ETAG_MAX_LEN] = {0};
 
+// EInk Display - LTA Data Mall
+static char lta_account_key[LTA_ACCOUNT_KEY_MAX_LEN] = {0};
+static char bus_stop_number[BUS_STOP_NUMBER_MAX_LEN] = {0};
+static char bus_services[BUS_SERVICES_MAX_LEN] = {0};
+static int bus_time_start = 0;
+static int bus_time_end = 1439;
+
 // Home Assistant
 static char ha_url[HA_URL_MAX_LEN] = {0};
 
@@ -247,6 +254,39 @@ esp_err_t config_manager_init(void)
         size_t etag_len = HTTP_ETAG_MAX_LEN;
         if (nvs_get_str(nvs_handle, NVS_IMAGE_ETAG_KEY, image_etag, &etag_len) == ESP_OK) {
             ESP_LOGI(TAG, "Loaded image ETag from NVS (length: %zu)", etag_len);
+        }
+
+        // EInk Display - LTA Data Mall
+        size_t lta_key_len = LTA_ACCOUNT_KEY_MAX_LEN;
+        if (nvs_get_str(nvs_handle, NVS_LTA_ACCOUNT_KEY, lta_account_key, &lta_key_len) ==
+            ESP_OK) {
+            ESP_LOGI(TAG, "Loaded LTA AccountKey from NVS");
+        }
+
+        size_t bus_stop_len = BUS_STOP_NUMBER_MAX_LEN;
+        if (nvs_get_str(nvs_handle, NVS_BUS_STOP_NUMBER_KEY, bus_stop_number, &bus_stop_len) ==
+            ESP_OK) {
+            ESP_LOGI(TAG, "Loaded bus stop number from NVS: %s", bus_stop_number);
+        }
+
+        size_t bus_services_len = BUS_SERVICES_MAX_LEN;
+        if (nvs_get_str(nvs_handle, NVS_BUS_SERVICES_KEY, bus_services, &bus_services_len) ==
+            ESP_OK) {
+            ESP_LOGI(TAG, "Loaded bus services from NVS: %s", bus_services);
+        }
+
+        int32_t stored_bus_time_start = 0;
+        if (nvs_get_i32(nvs_handle, NVS_BUS_TIME_START_KEY, &stored_bus_time_start) == ESP_OK) {
+            bus_time_start = stored_bus_time_start;
+            ESP_LOGI(TAG, "Loaded bus time start from NVS: %d minutes (%02d:%02d)",
+                     bus_time_start, bus_time_start / 60, bus_time_start % 60);
+        }
+
+        int32_t stored_bus_time_end = 1439;
+        if (nvs_get_i32(nvs_handle, NVS_BUS_TIME_END_KEY, &stored_bus_time_end) == ESP_OK) {
+            bus_time_end = stored_bus_time_end;
+            ESP_LOGI(TAG, "Loaded bus time end from NVS: %d minutes (%02d:%02d)", bus_time_end,
+                     bus_time_end / 60, bus_time_end % 60);
         }
 
         // Home Assistant
@@ -876,6 +916,123 @@ const char *config_manager_get_image_etag(void)
 {
     return image_etag;
 }
+
+// ============================================================================
+// EInk Display - LTA Data Mall
+// ============================================================================
+
+void config_manager_set_lta_account_key(const char *key)
+{
+    if (key == NULL) {
+        return;
+    }
+
+    strncpy(lta_account_key, key, LTA_ACCOUNT_KEY_MAX_LEN - 1);
+    lta_account_key[LTA_ACCOUNT_KEY_MAX_LEN - 1] = '\0';
+
+    nvs_handle_t nvs_handle;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle) == ESP_OK) {
+        nvs_set_str(nvs_handle, NVS_LTA_ACCOUNT_KEY, lta_account_key);
+        nvs_commit(nvs_handle);
+        nvs_close(nvs_handle);
+    }
+
+    ESP_LOGI(TAG, "LTA AccountKey set (length: %zu)", strlen(lta_account_key));
+}
+
+const char *config_manager_get_lta_account_key(void)
+{
+    return lta_account_key;
+}
+
+void config_manager_set_bus_stop_number(const char *number)
+{
+    if (number == NULL) {
+        return;
+    }
+
+    strncpy(bus_stop_number, number, BUS_STOP_NUMBER_MAX_LEN - 1);
+    bus_stop_number[BUS_STOP_NUMBER_MAX_LEN - 1] = '\0';
+
+    nvs_handle_t nvs_handle;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle) == ESP_OK) {
+        nvs_set_str(nvs_handle, NVS_BUS_STOP_NUMBER_KEY, bus_stop_number);
+        nvs_commit(nvs_handle);
+        nvs_close(nvs_handle);
+    }
+
+    ESP_LOGI(TAG, "Bus stop number set to: %s", bus_stop_number);
+}
+
+const char *config_manager_get_bus_stop_number(void)
+{
+    return bus_stop_number;
+}
+
+void config_manager_set_bus_services(const char *services)
+{
+    if (services == NULL) {
+        return;
+    }
+
+    strncpy(bus_services, services, BUS_SERVICES_MAX_LEN - 1);
+    bus_services[BUS_SERVICES_MAX_LEN - 1] = '\0';
+
+    nvs_handle_t nvs_handle;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle) == ESP_OK) {
+        nvs_set_str(nvs_handle, NVS_BUS_SERVICES_KEY, bus_services);
+        nvs_commit(nvs_handle);
+        nvs_close(nvs_handle);
+    }
+
+    ESP_LOGI(TAG, "Bus services set to: %s", bus_services);
+}
+
+const char *config_manager_get_bus_services(void)
+{
+    return bus_services;
+}
+
+void config_manager_set_bus_time_start(int minutes)
+{
+    bus_time_start = minutes;
+
+    nvs_handle_t nvs_handle;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle) == ESP_OK) {
+        nvs_set_i32(nvs_handle, NVS_BUS_TIME_START_KEY, minutes);
+        nvs_commit(nvs_handle);
+        nvs_close(nvs_handle);
+    }
+
+    ESP_LOGI(TAG, "Bus time start set to: %d minutes (%02d:%02d)", minutes, minutes / 60,
+             minutes % 60);
+}
+
+int config_manager_get_bus_time_start(void)
+{
+    return bus_time_start;
+}
+
+void config_manager_set_bus_time_end(int minutes)
+{
+    bus_time_end = minutes;
+
+    nvs_handle_t nvs_handle;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle) == ESP_OK) {
+        nvs_set_i32(nvs_handle, NVS_BUS_TIME_END_KEY, minutes);
+        nvs_commit(nvs_handle);
+        nvs_close(nvs_handle);
+    }
+
+    ESP_LOGI(TAG, "Bus time end set to: %d minutes (%02d:%02d)", minutes, minutes / 60,
+             minutes % 60);
+}
+
+int config_manager_get_bus_time_end(void)
+{
+    return bus_time_end;
+}
+
 // ============================================================================
 // Home Assistant
 // ============================================================================

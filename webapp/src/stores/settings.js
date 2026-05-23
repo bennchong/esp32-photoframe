@@ -45,6 +45,11 @@ export const useSettingsStore = defineStore("settings", () => {
     httpHeaderKey: "",
     httpHeaderValue: "",
     saveDownloadedImages: true,
+    ltaAccountKey: "",
+    busStopNumber: "",
+    busServices: "",
+    busTimeStart: "00:00",
+    busTimeEnd: "23:59",
     // Home Assistant
     haUrl: "",
     // Power
@@ -198,6 +203,20 @@ export const useSettingsStore = defineStore("settings", () => {
       const endMins = endMinutes % 60;
       deviceSettings.value.sleepScheduleEnd = `${String(endHours).padStart(2, "0")}:${String(endMins).padStart(2, "0")}`;
 
+      deviceSettings.value.ltaAccountKey = data.lta_account_key || "";
+      deviceSettings.value.busStopNumber = data.bus_stop_number || "";
+      deviceSettings.value.busServices = data.bus_services || "";
+
+      const busTimeStartMinutes = data.bus_time_start ?? 0;
+      const busTimeStartHours = Math.floor(busTimeStartMinutes / 60);
+      const busTimeStartMins = busTimeStartMinutes % 60;
+      deviceSettings.value.busTimeStart = `${String(busTimeStartHours).padStart(2, "0")}:${String(busTimeStartMins).padStart(2, "0")}`;
+
+      const busTimeEndMinutes = data.bus_time_end ?? 1439;
+      const busTimeEndHours = Math.floor(busTimeEndMinutes / 60);
+      const busTimeEndMins = busTimeEndMinutes % 60;
+      deviceSettings.value.busTimeEnd = `${String(busTimeEndHours).padStart(2, "0")}:${String(busTimeEndMins).padStart(2, "0")}`;
+
       // Parse timezone from POSIX format (e.g., "UTC-8" -> 8)
       const timezone = data.timezone || "UTC0";
       let offset = 0;
@@ -225,6 +244,12 @@ export const useSettingsStore = defineStore("settings", () => {
 
     const [endHours, endMins] = deviceSettings.value.sleepScheduleEnd.split(":").map(Number);
     const sleepScheduleEnd = endHours * 60 + endMins;
+
+    const [busStartHours, busStartMins] = deviceSettings.value.busTimeStart.split(":").map(Number);
+    const busTimeStart = busStartHours * 60 + busStartMins;
+
+    const [busEndHours, busEndMins] = deviceSettings.value.busTimeEnd.split(":").map(Number);
+    const busTimeEnd = busEndHours * 60 + busEndMins;
 
     // Convert UTC offset to POSIX timezone format
     const offsetValue = deviceSettings.value.timezoneOffset || 0;
@@ -263,6 +288,11 @@ export const useSettingsStore = defineStore("settings", () => {
       access_token: deviceSettings.value.accessToken,
       http_header_key: deviceSettings.value.httpHeaderKey,
       http_header_value: deviceSettings.value.httpHeaderValue,
+      lta_account_key: deviceSettings.value.ltaAccountKey,
+      bus_stop_number: deviceSettings.value.busStopNumber,
+      bus_services: deviceSettings.value.busServices,
+      bus_time_start: busTimeStart,
+      bus_time_end: busTimeEnd,
       wifi_ssid: deviceSettings.value.wifiSsid,
       openai_api_key: deviceSettings.value.aiCredentials.openaiApiKey,
       google_api_key: deviceSettings.value.aiCredentials.googleApiKey,

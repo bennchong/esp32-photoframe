@@ -329,7 +329,7 @@ async function performFactoryReset() {
 
       <v-tabs v-model="tab" color="primary" show-arrows density="compact">
         <v-tab value="general"> General </v-tab>
-        <v-tab value="autoRotate"> Auto Rotate </v-tab>
+        <v-tab value="autoRotate"> EInk Display Settings </v-tab>
         <v-tab value="power"> Power </v-tab>
         <v-tab value="homeAssistant"> Home Assistant </v-tab>
         <v-tab value="processing"> Processing </v-tab>
@@ -451,7 +451,7 @@ async function performFactoryReset() {
             </v-row>
           </v-tabs-window-item>
 
-          <!-- Auto Rotate Tab -->
+          <!-- EInk Display Settings Tab -->
           <v-tabs-window-item value="autoRotate">
             <v-switch
               v-model="settingsStore.deviceSettings.autoRotate"
@@ -663,6 +663,55 @@ async function performFactoryReset() {
                 Images won't rotate during this period. Useful for night hours.
               </v-alert>
             </div>
+
+            <v-divider class="my-4" />
+
+            <v-card variant="tonal" class="mb-4">
+              <v-card-title class="text-subtitle-1">LTA Data Mall</v-card-title>
+              <v-card-text>
+                <v-text-field
+                  v-model="settingsStore.deviceSettings.ltaAccountKey"
+                  label="LTA Data Mall AccountKey"
+                  type="password"
+                  variant="outlined"
+                  hint="API key for LTA Data Mall"
+                  persistent-hint
+                  class="mb-4"
+                />
+                <v-text-field
+                  v-model="settingsStore.deviceSettings.busStopNumber"
+                  label="Bus Stop Number"
+                  variant="outlined"
+                  class="mb-4"
+                />
+                <v-text-field
+                  v-model="settingsStore.deviceSettings.busServices"
+                  label="Bus Services"
+                  variant="outlined"
+                  hint="Comma-separated list (e.g., 12, 36, 851)"
+                  persistent-hint
+                  class="mb-4"
+                />
+                <v-row>
+                  <v-col cols="6" md="3">
+                    <v-text-field
+                      v-model="settingsStore.deviceSettings.busTimeStart"
+                      label="From"
+                      type="time"
+                      variant="outlined"
+                    />
+                  </v-col>
+                  <v-col cols="6" md="3">
+                    <v-text-field
+                      v-model="settingsStore.deviceSettings.busTimeEnd"
+                      label="To"
+                      type="time"
+                      variant="outlined"
+                    />
+                  </v-col>
+                </v-row>
+              </v-card-text>
+            </v-card>
           </v-tabs-window-item>
 
           <!-- Power Tab -->

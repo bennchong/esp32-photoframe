@@ -253,6 +253,32 @@ esp_err_t apply_config_from_json(cJSON *root)
         config_manager_set_save_downloaded_images(cJSON_IsTrue(item));
     }
 
+    // EInk Display - LTA Data Mall
+    item = cJSON_GetObjectItem(root, "lta_account_key");
+    if (item && cJSON_IsString(item)) {
+        config_manager_set_lta_account_key(cJSON_GetStringValue(item));
+    }
+
+    item = cJSON_GetObjectItem(root, "bus_stop_number");
+    if (item && cJSON_IsString(item)) {
+        config_manager_set_bus_stop_number(cJSON_GetStringValue(item));
+    }
+
+    item = cJSON_GetObjectItem(root, "bus_services");
+    if (item && cJSON_IsString(item)) {
+        config_manager_set_bus_services(cJSON_GetStringValue(item));
+    }
+
+    item = cJSON_GetObjectItem(root, "bus_time_start");
+    if (item && cJSON_IsNumber(item)) {
+        config_manager_set_bus_time_start(item->valueint);
+    }
+
+    item = cJSON_GetObjectItem(root, "bus_time_end");
+    if (item && cJSON_IsNumber(item)) {
+        config_manager_set_bus_time_end(item->valueint);
+    }
+
     // Home Assistant
     item = cJSON_GetObjectItem(root, "ha_url");
     if (item && cJSON_IsString(item)) {

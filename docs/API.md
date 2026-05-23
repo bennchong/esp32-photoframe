@@ -129,6 +129,11 @@ Get current device configuration.
   "http_header_key": "",
   "http_header_value": "",
   "save_downloaded_images": true,
+  "lta_account_key": "",
+  "bus_stop_number": "",
+  "bus_services": "",
+  "bus_time_start": 0,
+  "bus_time_end": 1439,
   "ha_url": "",
   "openai_api_key": "",
   "google_api_key": "",
@@ -156,6 +161,11 @@ Get current device configuration.
 - `access_token`: Bearer token for image URL authentication
 - `http_header_key`/`http_header_value`: Custom HTTP header for image fetches
 - `save_downloaded_images`: Save fetched images to Downloads album
+- `lta_account_key`: LTA Data Mall AccountKey
+- `bus_stop_number`: Bus stop number for LTA Data Mall queries
+- `bus_services`: Comma-separated bus service list (empty for all)
+- `bus_time_start`: Start time in minutes since midnight for bus display window
+- `bus_time_end`: End time in minutes since midnight for bus display window
 - `ha_url`: Home Assistant URL for integration
 - `openai_api_key`/`google_api_key`: AI API keys for client-side generation
 - `deep_sleep_enabled`: Enable deep sleep between rotations
