@@ -1,3 +1,9 @@
+/**
+ * @file image_processor.h
+ * @brief Image decoding and dithering pipeline.
+ * @ingroup image_processing
+ */
+
 #ifndef IMAGE_PROCESSOR_H
 #define IMAGE_PROCESSOR_H
 

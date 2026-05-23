@@ -1,3 +1,9 @@
+/**
+ * @file display_manager.h
+ * @brief E-paper display control and presentation pipeline.
+ * @ingroup display
+ */
+
 #ifndef DISPLAY_MANAGER_H
 #define DISPLAY_MANAGER_H
 

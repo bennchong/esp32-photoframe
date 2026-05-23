@@ -1,3 +1,9 @@
+/**
+ * @file main.c
+ * @brief System entry point and boot/deep-sleep orchestration.
+ * @ingroup core
+ */
+
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -124,6 +130,13 @@ static bool connect_to_wifi_with_timeout(int timeout_seconds)
     }
 }
 
+/**
+ * @brief Polls hardware buttons and dispatches actions.
+ *
+ * @details Handles BOOT/ROTATE/CLEAR presses with debounce timing and triggers
+ * sleep resets, image rotation, or display clear actions.
+ * @see flow_button_responses
+ */
 static void button_task(void *arg)
 {
     bool last_boot_state = 1;  // Default distinct from current to avoid triggers if NC
@@ -206,6 +219,13 @@ static void button_task(void *arg)
     }
 }
 
+/**
+ * @brief Handles the wake flow after deep sleep.
+ *
+ * @details Initializes Wi-Fi on demand, runs periodic tasks, rotates the image,
+ * notifies integrations, and returns to deep sleep.
+ * @see flow_deep_sleep
+ */
 void deep_sleep_wake_main(wakeup_source_t wakeup_src)
 {
     bool is_button_wake = (wakeup_src == WAKEUP_SOURCE_ROTATE_BUTTON);
@@ -290,6 +310,13 @@ void deep_sleep_wake_main(wakeup_source_t wakeup_src)
     // Won't reach here after sleep
 }
 
+/**
+ * @brief Firmware entry point for cold boot and wake-up.
+ *
+ * @details Initializes subsystems, routes based on wake source, and starts
+ * network services and the HTTP API.
+ * @see flow_deep_sleep
+ */
 void app_main(void)
 {
     // Check reset reason to detect crashes

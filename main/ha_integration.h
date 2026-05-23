@@ -1,3 +1,9 @@
+/**
+ * @file ha_integration.h
+ * @brief Home Assistant notifications and integration helpers.
+ * @ingroup integration
+ */
+
 #ifndef HA_INTEGRATION_H
 #define HA_INTEGRATION_H
 
