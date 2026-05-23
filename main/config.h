@@ -103,6 +103,7 @@ typedef enum {
 
 // EInk Display - LTA Data Mall
 #define NVS_LTA_ACCOUNT_KEY "lta_key"
+#define NVS_BUS_ENABLED_KEY "bus_en"
 #define NVS_BUS_STOP_NUMBER_KEY "bus_stop"
 #define NVS_BUS_SERVICES_KEY "bus_svcs"
 #define NVS_BUS_TIME_START_KEY "bus_time_s"

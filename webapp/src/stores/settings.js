@@ -46,6 +46,7 @@ export const useSettingsStore = defineStore("settings", () => {
     httpHeaderValue: "",
     saveDownloadedImages: true,
     ltaAccountKey: "",
+    busEnabled: false,
     busStopNumber: "",
     busServices: "",
     busTimeStart: "00:00",
@@ -204,6 +205,7 @@ export const useSettingsStore = defineStore("settings", () => {
       deviceSettings.value.sleepScheduleEnd = `${String(endHours).padStart(2, "0")}:${String(endMins).padStart(2, "0")}`;
 
       deviceSettings.value.ltaAccountKey = data.lta_account_key || "";
+      deviceSettings.value.busEnabled = data.bus_enabled ?? false;
       deviceSettings.value.busStopNumber = data.bus_stop_number || "";
       deviceSettings.value.busServices = data.bus_services || "";
 
@@ -289,6 +291,7 @@ export const useSettingsStore = defineStore("settings", () => {
       http_header_key: deviceSettings.value.httpHeaderKey,
       http_header_value: deviceSettings.value.httpHeaderValue,
       lta_account_key: deviceSettings.value.ltaAccountKey,
+      bus_enabled: deviceSettings.value.busEnabled,
       bus_stop_number: deviceSettings.value.busStopNumber,
       bus_services: deviceSettings.value.busServices,
       bus_time_start: busTimeStart,

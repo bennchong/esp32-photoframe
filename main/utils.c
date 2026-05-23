@@ -259,6 +259,11 @@ esp_err_t apply_config_from_json(cJSON *root)
         config_manager_set_lta_account_key(cJSON_GetStringValue(item));
     }
 
+    item = cJSON_GetObjectItem(root, "bus_enabled");
+    if (item && cJSON_IsBool(item)) {
+        config_manager_set_bus_enabled(cJSON_IsTrue(item));
+    }
+
     item = cJSON_GetObjectItem(root, "bus_stop_number");
     if (item && cJSON_IsString(item)) {
         config_manager_set_bus_stop_number(cJSON_GetStringValue(item));

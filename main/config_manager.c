@@ -47,6 +47,7 @@ static char image_etag[HTTP_ETAG_MAX_LEN] = {0};
 
 // EInk Display - LTA Data Mall
 static char lta_account_key[LTA_ACCOUNT_KEY_MAX_LEN] = {0};
+static bool bus_enabled = false;
 static char bus_stop_number[BUS_STOP_NUMBER_MAX_LEN] = {0};
 static char bus_services[BUS_SERVICES_MAX_LEN] = {0};
 static int bus_time_start = 0;
@@ -261,6 +262,13 @@ esp_err_t config_manager_init(void)
         if (nvs_get_str(nvs_handle, NVS_LTA_ACCOUNT_KEY, lta_account_key, &lta_key_len) ==
             ESP_OK) {
             ESP_LOGI(TAG, "Loaded LTA AccountKey from NVS");
+        }
+
+        uint8_t stored_bus_enabled = 0;
+        if (nvs_get_u8(nvs_handle, NVS_BUS_ENABLED_KEY, &stored_bus_enabled) == ESP_OK) {
+            bus_enabled = (stored_bus_enabled != 0);
+            ESP_LOGI(TAG, "Loaded bus feature enabled from NVS: %s",
+                     bus_enabled ? "yes" : "no");
         }
 
         size_t bus_stop_len = BUS_STOP_NUMBER_MAX_LEN;
@@ -943,6 +951,25 @@ void config_manager_set_lta_account_key(const char *key)
 const char *config_manager_get_lta_account_key(void)
 {
     return lta_account_key;
+}
+
+void config_manager_set_bus_enabled(bool enabled)
+{
+    bus_enabled = enabled;
+
+    nvs_handle_t nvs_handle;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle) == ESP_OK) {
+        nvs_set_u8(nvs_handle, NVS_BUS_ENABLED_KEY, bus_enabled ? 1 : 0);
+        nvs_commit(nvs_handle);
+        nvs_close(nvs_handle);
+    }
+
+    ESP_LOGI(TAG, "Bus feature enabled set to: %s", bus_enabled ? "yes" : "no");
+}
+
+bool config_manager_get_bus_enabled(void)
+{
+    return bus_enabled;
 }
 
 void config_manager_set_bus_stop_number(const char *number)

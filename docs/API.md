@@ -130,6 +130,7 @@ Get current device configuration.
   "http_header_value": "",
   "save_downloaded_images": true,
   "lta_account_key": "",
+  "bus_enabled": false,
   "bus_stop_number": "",
   "bus_services": "",
   "bus_time_start": 0,
@@ -162,6 +163,7 @@ Get current device configuration.
 - `http_header_key`/`http_header_value`: Custom HTTP header for image fetches
 - `save_downloaded_images`: Save fetched images to Downloads album
 - `lta_account_key`: LTA Data Mall AccountKey
+- `bus_enabled`: Enable bus arrivals display
 - `bus_stop_number`: Bus stop number for LTA Data Mall queries
 - `bus_services`: Comma-separated bus service list (empty for all)
 - `bus_time_start`: Start time in minutes since midnight for bus display window

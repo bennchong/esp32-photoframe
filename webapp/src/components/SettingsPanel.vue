@@ -669,6 +669,12 @@ async function performFactoryReset() {
             <v-card variant="tonal" class="mb-4">
               <v-card-title class="text-subtitle-1">LTA Data Mall</v-card-title>
               <v-card-text>
+                <v-switch
+                  v-model="settingsStore.deviceSettings.busEnabled"
+                  label="Enable Bus Arrivals"
+                  color="primary"
+                  class="mb-4"
+                />
                 <v-text-field
                   v-model="settingsStore.deviceSettings.ltaAccountKey"
                   label="LTA Data Mall AccountKey"
@@ -677,12 +683,14 @@ async function performFactoryReset() {
                   hint="API key for LTA Data Mall"
                   persistent-hint
                   class="mb-4"
+                  :disabled="!settingsStore.deviceSettings.busEnabled"
                 />
                 <v-text-field
                   v-model="settingsStore.deviceSettings.busStopNumber"
                   label="Bus Stop Number"
                   variant="outlined"
                   class="mb-4"
+                  :disabled="!settingsStore.deviceSettings.busEnabled"
                 />
                 <v-text-field
                   v-model="settingsStore.deviceSettings.busServices"
@@ -691,6 +699,7 @@ async function performFactoryReset() {
                   hint="Comma-separated list (e.g., 12, 36, 851)"
                   persistent-hint
                   class="mb-4"
+                  :disabled="!settingsStore.deviceSettings.busEnabled"
                 />
                 <v-row>
                   <v-col cols="6" md="3">
@@ -699,6 +708,7 @@ async function performFactoryReset() {
                       label="From"
                       type="time"
                       variant="outlined"
+                      :disabled="!settingsStore.deviceSettings.busEnabled"
                     />
                   </v-col>
                   <v-col cols="6" md="3">
@@ -707,6 +717,7 @@ async function performFactoryReset() {
                       label="To"
                       type="time"
                       variant="outlined"
+                      :disabled="!settingsStore.deviceSettings.busEnabled"
                     />
                   </v-col>
                 </v-row>

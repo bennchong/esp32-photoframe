@@ -106,6 +106,9 @@ const char *config_manager_get_image_etag(void);
 void config_manager_set_lta_account_key(const char *key);
 const char *config_manager_get_lta_account_key(void);
 
+void config_manager_set_bus_enabled(bool enabled);
+bool config_manager_get_bus_enabled(void);
+
 void config_manager_set_bus_stop_number(const char *number);
 const char *config_manager_get_bus_stop_number(void);
 
