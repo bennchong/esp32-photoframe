@@ -156,6 +156,79 @@ const resetting = ref(false);
 const showImportDialog = ref(false);
 const importData = ref(null);
 const importFileName = ref("");
+const ltaTesting = ref(false);
+const ltaTestStatus = ref("");
+const ltaTestMessage = ref("");
+const ltaMapLoading = ref(false);
+const ltaMapError = ref("");
+
+async function testLtaAccountKey() {
+  ltaTesting.value = true;
+  ltaTestStatus.value = "";
+  ltaTestMessage.value = "";
+
+  try {
+    const response = await fetch("/api/lta/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        lta_account_key: settingsStore.deviceSettings.ltaAccountKey,
+      }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (response.ok && data.valid) {
+      ltaTestStatus.value = "success";
+      ltaTestMessage.value = data.message || "AccountKey is valid";
+    } else {
+      ltaTestStatus.value = "error";
+      ltaTestMessage.value =
+        data.message || `Failed to validate AccountKey (HTTP ${response.status})`;
+    }
+  } catch (error) {
+    ltaTestStatus.value = "error";
+    ltaTestMessage.value = `Failed to reach device: ${error.message || error}`;
+  } finally {
+    ltaTesting.value = false;
+  }
+}
+
+function openBusStopMap() {
+  ltaMapError.value = "";
+
+  const openMap = (url) => {
+    const newWindow = window.open(url, "_blank", "noopener,noreferrer");
+    if (newWindow) {
+      newWindow.opener = null;
+    }
+  };
+
+  if (!navigator.geolocation) {
+    ltaMapError.value = "Geolocation is not available in this browser.";
+    openMap("https://www.google.com/maps/search/bus+stop");
+    return;
+  }
+
+  ltaMapLoading.value = true;
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      const { latitude, longitude } = position.coords;
+      const url = `https://www.google.com/maps/search/bus+stop/@${latitude},${longitude},16z`;
+      openMap(url);
+      ltaMapLoading.value = false;
+    },
+    (error) => {
+      ltaMapError.value = error.message || "Unable to fetch your location.";
+      openMap("https://www.google.com/maps/search/bus+stop");
+      ltaMapLoading.value = false;
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 60000,
+    }
+  );
+}
 
 async function exportConfig() {
   try {
@@ -685,6 +758,48 @@ async function performFactoryReset() {
                   class="mb-4"
                   :disabled="!settingsStore.deviceSettings.busEnabled"
                 />
+                <v-row class="mb-4">
+                  <v-col cols="12" md="4">
+                    <v-btn
+                      variant="outlined"
+                      :loading="ltaTesting"
+                      :disabled="!settingsStore.deviceSettings.busEnabled"
+                      @click="testLtaAccountKey"
+                    >
+                      <v-icon start>mdi-shield-check</v-icon>
+                      Test AccountKey
+                    </v-btn>
+                  </v-col>
+                  <v-col cols="12" md="8">
+                    <v-btn
+                      variant="outlined"
+                      :loading="ltaMapLoading"
+                      :disabled="!settingsStore.deviceSettings.busEnabled"
+                      @click="openBusStopMap"
+                    >
+                      <v-icon start>mdi-map-marker</v-icon>
+                      Find nearby bus stops in Google Maps
+                    </v-btn>
+                  </v-col>
+                </v-row>
+                <v-alert
+                  v-if="ltaTestMessage"
+                  :type="ltaTestStatus === 'success' ? 'success' : 'error'"
+                  variant="tonal"
+                  density="compact"
+                  class="mb-4"
+                >
+                  {{ ltaTestMessage }}
+                </v-alert>
+                <v-alert
+                  v-if="ltaMapError"
+                  type="warning"
+                  variant="tonal"
+                  density="compact"
+                  class="mb-4"
+                >
+                  {{ ltaMapError }}
+                </v-alert>
                 <v-text-field
                   v-model="settingsStore.deviceSettings.busStopNumber"
                   label="Bus Stop Number"
@@ -692,6 +807,9 @@ async function performFactoryReset() {
                   class="mb-4"
                   :disabled="!settingsStore.deviceSettings.busEnabled"
                 />
+                <v-alert type="info" variant="tonal" density="compact" class="mb-4">
+                  Use Google Maps to locate a nearby bus stop and enter its stop number here.
+                </v-alert>
                 <v-text-field
                   v-model="settingsStore.deviceSettings.busServices"
                   label="Bus Services"

@@ -199,6 +199,28 @@ Update configuration. Only include fields to change.
 
 Same as `POST /api/config`. Both methods accept partial updates.
 
+### `POST /api/lta/test`
+
+Validate an LTA Data Mall AccountKey. Optionally supply a key in the request body; otherwise the
+device will use the stored `lta_account_key` from configuration.
+
+**Request (optional body):**
+```json
+{
+  "lta_account_key": "your-account-key"
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "valid": true,
+  "message": "AccountKey is valid",
+  "http_status": 200
+}
+```
+
 ---
 
 ## Image Display

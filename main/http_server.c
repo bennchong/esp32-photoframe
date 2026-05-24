@@ -18,7 +18,9 @@
 #include "config_manager.h"
 #include "display_manager.h"
 #include "esp_app_desc.h"
+#include "esp_crt_bundle.h"
 #include "esp_heap_caps.h"
+#include "esp_http_client.h"
 #include "esp_http_server.h"
 #include "esp_littlefs.h"
 #include "esp_log.h"
@@ -45,6 +47,9 @@ static httpd_handle_t server = NULL;
 static bool system_ready = false;
 
 #define HTTPD_503 "503 Service Unavailable"
+#define LTA_TEST_URL "https://datamall2.mytransport.sg/ltaodataservice/BusStops?$skip=0"
+#define LTA_TEST_BODY_MAX 512
+#define LTA_TEST_TIMEOUT_MS 10000
 
 /**
  * @brief Validate a user-supplied path component to prevent directory traversal attacks.
@@ -1761,6 +1766,127 @@ static esp_err_t config_handler(httpd_req_t *req)
     httpd_resp_send_err(req, HTTPD_405_METHOD_NOT_ALLOWED, "Method not allowed");
     return ESP_FAIL;
 }
+
+static esp_err_t lta_test_handler(httpd_req_t *req)
+{
+    if (!system_ready) {
+        httpd_resp_set_status(req, HTTPD_503);
+        httpd_resp_sendstr(req, "System not ready");
+        return ESP_OK;
+    }
+
+    if (req->method != HTTP_POST) {
+        httpd_resp_send_err(req, HTTPD_405_METHOD_NOT_ALLOWED, "Method not allowed");
+        return ESP_FAIL;
+    }
+
+    char account_key[LTA_ACCOUNT_KEY_MAX_LEN] = {0};
+
+    if (req->content_len > 0) {
+        if (req->content_len > LTA_TEST_BODY_MAX) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Request body too large");
+            return ESP_FAIL;
+        }
+
+        char buf[LTA_TEST_BODY_MAX + 1];
+        int ret = httpd_req_recv(req, buf, MIN(req->content_len, sizeof(buf) - 1));
+        if (ret <= 0) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Failed to read request");
+            return ESP_FAIL;
+        }
+        buf[ret] = '\0';
+
+        cJSON *root = cJSON_Parse(buf);
+        if (!root) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+            return ESP_FAIL;
+        }
+
+        cJSON *key_json = cJSON_GetObjectItem(root, "lta_account_key");
+        if (key_json && cJSON_IsString(key_json) && key_json->valuestring) {
+            strncpy(account_key, key_json->valuestring, LTA_ACCOUNT_KEY_MAX_LEN - 1);
+            account_key[LTA_ACCOUNT_KEY_MAX_LEN - 1] = '\0';
+        }
+
+        cJSON_Delete(root);
+    }
+
+    if (account_key[0] == '\0') {
+        const char *stored_key = config_manager_get_lta_account_key();
+        if (stored_key && stored_key[0] != '\0') {
+            strncpy(account_key, stored_key, LTA_ACCOUNT_KEY_MAX_LEN - 1);
+            account_key[LTA_ACCOUNT_KEY_MAX_LEN - 1] = '\0';
+        }
+    }
+
+    bool valid = false;
+    int status_code = 0;
+    esp_err_t http_err = ESP_OK;
+    char message[128] = {0};
+
+    if (account_key[0] == '\0') {
+        snprintf(message, sizeof(message), "LTA AccountKey is required");
+        httpd_resp_set_status(req, HTTPD_400_BAD_REQUEST);
+    } else {
+        esp_http_client_config_t config = {
+            .url = LTA_TEST_URL,
+            .method = HTTP_METHOD_GET,
+            .timeout_ms = LTA_TEST_TIMEOUT_MS,
+            .crt_bundle_attach = esp_crt_bundle_attach,
+            .user_agent = "ESP32-PhotoFrame/1.0",
+        };
+
+        esp_http_client_handle_t client = esp_http_client_init(&config);
+        if (!client) {
+            http_err = ESP_FAIL;
+        } else {
+            bool opened = false;
+            esp_http_client_set_header(client, "AccountKey", account_key);
+            esp_http_client_set_header(client, "Accept", "application/json");
+
+            http_err = esp_http_client_open(client, 0);
+            if (http_err == ESP_OK) {
+                opened = true;
+                esp_http_client_fetch_headers(client);
+                status_code = esp_http_client_get_status_code(client);
+            }
+
+            if (opened) {
+                esp_http_client_close(client);
+            }
+            esp_http_client_cleanup(client);
+        }
+
+        if (http_err != ESP_OK) {
+            snprintf(message, sizeof(message), "LTA API request failed: %s",
+                     esp_err_to_name(http_err));
+            httpd_resp_set_status(req, "502 Bad Gateway");
+        } else if (status_code == 200) {
+            valid = true;
+            snprintf(message, sizeof(message), "AccountKey is valid");
+        } else if (status_code == 401 || status_code == 403) {
+            snprintf(message, sizeof(message), "AccountKey is invalid");
+        } else {
+            snprintf(message, sizeof(message), "LTA API returned HTTP %d", status_code);
+        }
+    }
+
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddStringToObject(response, "status", valid ? "success" : "error");
+    cJSON_AddBoolToObject(response, "valid", valid);
+    cJSON_AddStringToObject(response, "message", message);
+    if (status_code > 0) {
+        cJSON_AddNumberToObject(response, "http_status", status_code);
+    }
+
+    char *json_str = cJSON_Print(response);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, json_str);
+
+    free(json_str);
+    cJSON_Delete(response);
+    return ESP_OK;
+}
 static esp_err_t albums_handler(httpd_req_t *req)
 {
     if (!system_ready) {
@@ -2629,6 +2755,12 @@ esp_err_t http_server_init(void)
                                         .handler = config_handler,
                                         .user_ctx = NULL};
         httpd_register_uri_handler(server, &config_patch_uri);
+
+        httpd_uri_t lta_test_uri = {.uri = "/api/lta/test",
+                                    .method = HTTP_POST,
+                                    .handler = lta_test_handler,
+                                    .user_ctx = NULL};
+        httpd_register_uri_handler(server, &lta_test_uri);
 
         httpd_uri_t battery_uri = {.uri = "/api/battery",
                                    .method = HTTP_GET,
