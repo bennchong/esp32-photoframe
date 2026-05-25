@@ -823,7 +823,7 @@ async function performFactoryReset() {
                   <v-col cols="6" md="3">
                     <v-text-field
                       v-model="settingsStore.deviceSettings.busTimeStart"
-                      label="From"
+                      label="Show Bus Timings From"
                       type="time"
                       variant="outlined"
                       :disabled="!settingsStore.deviceSettings.busEnabled"
@@ -832,13 +832,16 @@ async function performFactoryReset() {
                   <v-col cols="6" md="3">
                     <v-text-field
                       v-model="settingsStore.deviceSettings.busTimeEnd"
-                      label="To"
+                      label="Show Bus Timings To"
                       type="time"
                       variant="outlined"
                       :disabled="!settingsStore.deviceSettings.busEnabled"
                     />
                   </v-col>
                 </v-row>
+                <v-alert type="info" variant="tonal" density="compact">
+                  Bus timings are shown only during this time range.
+                </v-alert>
               </v-card-text>
             </v-card>
           </v-tabs-window-item>
