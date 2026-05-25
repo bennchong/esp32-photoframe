@@ -26,30 +26,36 @@
  * - \ref utils
  *
  * @section overview_interactions Component interactions
- * - Rotation triggers flow through @ref utils into @ref image_processing and @ref display.
- * - Sleep decisions are owned by @ref power and referenced from @ref core and @ref webapi.
+ * - Photo updates flow through @ref utils into @ref image_processing, @ref storage, and @ref display.
+ * - Sleep decisions are owned by @ref power and referenced from @ref core, @ref webapi, and button handling.
  * - OTA checks are scheduled by @ref core periodic tasks and executed by @ref ota.
  * - Home Assistant notifications in @ref integration are emitted after state changes.
  *
  * @section flow_photo_change Photo change flow
  *
  * @subsection flow_photo_change_sequence Sequence diagram
+ * A rotation can start from a timer wake-up, a button press, or the web/API layer.
+ * @ref utils decides whether to use local storage or the URL download path, then
+ * hands the rendered result to @ref display. Successful changes notify Home
+ * Assistant after the display update completes.
  * \msc
  * msc {
- *   Trigger, PowerMgr, Utils, Config, Fetcher, ImageProc, DisplayMgr, Storage, HA;
+ *   Trigger, PowerMgr, Utils, ConfigMgr, Fetcher, ImageProc, Storage, DisplayMgr, HA;
  *   Trigger->PowerMgr [label="reset sleep timer (interactive)"];
  *   Trigger->Utils [label="trigger_image_rotation()"];
- *   Utils->Config [label="get rotation mode"];
- *   Utils->Fetcher [label="URL mode: download image"];
- *   Fetcher->ImageProc [label="process + dither"];
- *   ImageProc->Storage [label="write processed image"];
- *   Utils->DisplayMgr [label="display/rotate from storage"];
- *   DisplayMgr->Storage [label="read image data"];
- *   DisplayMgr->DisplayMgr [label="refresh e-paper"];
+ *   Utils->ConfigMgr [label="read rotation mode / schedule"];
+ *   Utils->Fetcher [label="URL mode: fetch_and_save_image_from_url()"];
+ *   Fetcher->ImageProc [label="decode + dither + persist"];
+ *   ImageProc->DisplayMgr [label="display_manager_show_image()"];
+ *   Utils->DisplayMgr [label="SD mode: display_manager_rotate_from_storage()"];
+ *   DisplayMgr->Storage [label="enumerate albums / read image"];
+ *   DisplayMgr->DisplayMgr [label="render + refresh e-paper"];
  *   Utils->HA [label="ha_notify_update()"];
  * }
  * \endmsc
  *
+ * The state diagram below shows the decision points that lead to display refresh,
+ * including URL fetch failures falling back to local rotation.
  * @subsection flow_photo_change_state State diagram
  * \dot
  * digraph photo_change_state {
@@ -69,6 +75,9 @@
  * @section flow_button_responses Button response flow
  *
  * @subsection flow_button_responses_sequence Sequence diagram
+ * The button task polls BOOT/ROTATE/CLEAR inputs with debounce. BOOT only
+ * extends the awake window, ROTATE performs a full image change, and CLEAR
+ * clears the panel before notifying integrations.
  * \msc
  * msc {
  *   User, ButtonTask, PowerMgr, Utils, DisplayMgr, HA;
@@ -81,6 +90,9 @@
  * }
  * \endmsc
  *
+ * Wake-from-sleep button handling is routed earlier by @ref power before
+ * @ref button_task starts, so the same hardware buttons can either wake the
+ * device or act on the running UI depending on the current power state.
  * @subsection flow_button_responses_state State diagram
  * \dot
  * digraph button_state {
@@ -96,19 +108,29 @@
  * @section flow_deep_sleep Deep sleep flow
  *
  * @subsection flow_deep_sleep_sequence Sequence diagram
+ * Power initialization determines the wake source, enables the correct timer
+ * and EXT1 wakeups, and keeps the device in automatic light sleep when awake.
+ * Entering deep sleep shuts down Wi-Fi, prepares the board, unmounts storage,
+ * notifies Home Assistant, and then hands control to the ESP32 sleep engine.
  * \msc
  * msc {
- *   Trigger, PowerMgr, WiFi, Storage, BoardHAL, Sleep, Main;
- *   Trigger->PowerMgr [label="power_manager_enter_sleep()"];
+ *   Main, PowerMgr, WiFi, Storage, BoardHAL, HA, Sleep;
+ *   Main->PowerMgr [label="power_manager_init()"];
+ *   PowerMgr->PowerMgr [label="inspect wake source / timers"];
+ *   Main->PowerMgr [label="power_manager_enter_sleep()"];
+ *   PowerMgr->HA [label="ha_notify_offline()"];
  *   PowerMgr->WiFi [label="esp_wifi_stop()"];
  *   PowerMgr->BoardHAL [label="prepare_for_sleep()"];
  *   PowerMgr->Storage [label="storage_unmount()"];
  *   PowerMgr->Sleep [label="esp_deep_sleep_start()"];
- *   Sleep->PowerMgr [label="wake (timer/button)"];
- *   PowerMgr->Main [label="app_main()/deep_sleep_wake_main()"];
+ *   Sleep->Main [label="wake (timer/button)"];
+ *   Main->PowerMgr [label="power_manager_get_wakeup_source()"];
+ *   Main->Main [label="app_main()/deep_sleep_wake_main()"];
  * }
  * \endmsc
  *
+ * The state diagram mirrors the real boot path: timer wake-ups can jump back to
+ * sleep after a rotation, while a BOOT wake resumes the normal network/UI path.
  * @subsection flow_deep_sleep_state State diagram
  * \dot
  * digraph deep_sleep_state {
@@ -127,21 +149,26 @@
  * @section flow_ota OTA flow
  *
  * @subsection flow_ota_sequence Sequence diagram
+ * OTA is checked by a periodic task, stored in NVS for persistence, and only
+ * started when a newer release is available. During download the sleep timer is
+ * kept alive, the image is validated, and the firmware reboots after success.
  * \msc
  * msc {
- *   Trigger, OtaMgr, HttpClient, Flash, PowerMgr, HA;
- *   Trigger->OtaMgr [label="ota_check_for_update()"];
- *   OtaMgr->HttpClient [label="fetch GitHub release"];
- *   OtaMgr->OtaMgr [label="set OTA state"];
- *   Trigger->OtaMgr [label="ota_start_update()"];
+ *   PeriodicTasks, OtaMgr, HttpClient, PowerMgr, Flash, NVS, HA, System;
+ *   PeriodicTasks->OtaMgr [label="ota_check_for_update()"];
+ *   OtaMgr->HttpClient [label="fetch GitHub release info"];
+ *   OtaMgr->NVS [label="persist latest version / state"];
+ *   PeriodicTasks->OtaMgr [label="ota_start_update()"];
  *   OtaMgr->PowerMgr [label="reset_sleep_timer()"];
  *   OtaMgr->HttpClient [label="download firmware"];
  *   OtaMgr->Flash [label="write + validate"];
  *   OtaMgr->HA [label="ha_notify_update()"];
- *   OtaMgr->Flash [label="reboot"];
+ *   OtaMgr->System [label="esp_restart()"];
  * }
  * \endmsc
  *
+ * The state diagram below matches the manager's persisted states: checking,
+ * update available, downloading, installing, success, and error.
  * @subsection flow_ota_state State diagram
  * \dot
  * digraph ota_state {
