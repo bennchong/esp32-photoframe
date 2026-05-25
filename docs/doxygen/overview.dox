@@ -39,7 +39,6 @@
  * hands the rendered result to @ref display. Successful changes notify Home
  * Assistant after the display update completes.
  * \msc
- * msc {
  *   Trigger, PowerMgr, Utils, ConfigMgr, Fetcher, ImageProc, Storage, DisplayMgr, HA;
  *   Trigger->PowerMgr [label="reset sleep timer (interactive)"];
  *   Trigger->Utils [label="trigger_image_rotation()"];
@@ -51,7 +50,6 @@
  *   DisplayMgr->Storage [label="enumerate albums / read image"];
  *   DisplayMgr->DisplayMgr [label="render + refresh e-paper"];
  *   Utils->HA [label="ha_notify_update()"];
- * }
  * \endmsc
  *
  * The state diagram below shows the decision points that lead to display refresh,
@@ -79,7 +77,6 @@
  * extends the awake window, ROTATE performs a full image change, and CLEAR
  * clears the panel before notifying integrations.
  * \msc
- * msc {
  *   User, ButtonTask, PowerMgr, Utils, DisplayMgr, HA;
  *   User->ButtonTask [label="press BOOT/ROTATE/CLEAR"];
  *   ButtonTask->PowerMgr [label="reset_sleep_timer()"];
@@ -87,7 +84,6 @@
  *   Utils->DisplayMgr [label="display update"];
  *   ButtonTask->DisplayMgr [label="CLEAR: display_manager_clear()"];
  *   ButtonTask->HA [label="ha_notify_update()"];
- * }
  * \endmsc
  *
  * Wake-from-sleep button handling is routed earlier by @ref power before
@@ -113,7 +109,6 @@
  * Entering deep sleep shuts down Wi-Fi, prepares the board, unmounts storage,
  * notifies Home Assistant, and then hands control to the ESP32 sleep engine.
  * \msc
- * msc {
  *   Main, PowerMgr, WiFi, Storage, BoardHAL, HA, Sleep;
  *   Main->PowerMgr [label="power_manager_init()"];
  *   PowerMgr->PowerMgr [label="inspect wake source / timers"];
@@ -126,7 +121,6 @@
  *   Sleep->Main [label="wake (timer/button)"];
  *   Main->PowerMgr [label="power_manager_get_wakeup_source()"];
  *   Main->Main [label="app_main()/deep_sleep_wake_main()"];
- * }
  * \endmsc
  *
  * The state diagram mirrors the real boot path: timer wake-ups can jump back to
@@ -153,7 +147,6 @@
  * started when a newer release is available. During download the sleep timer is
  * kept alive, the image is validated, and the firmware reboots after success.
  * \msc
- * msc {
  *   PeriodicTasks, OtaMgr, HttpClient, PowerMgr, Flash, NVS, HA, System;
  *   PeriodicTasks->OtaMgr [label="ota_check_for_update()"];
  *   OtaMgr->HttpClient [label="fetch GitHub release info"];
@@ -164,7 +157,6 @@
  *   OtaMgr->Flash [label="write + validate"];
  *   OtaMgr->HA [label="ha_notify_update()"];
  *   OtaMgr->System [label="esp_restart()"];
- * }
  * \endmsc
  *
  * The state diagram below matches the manager's persisted states: checking,
