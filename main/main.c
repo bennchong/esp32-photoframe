@@ -27,7 +27,7 @@
 #endif
 
 #include "ha_integration.h"
-#include "http_server.h"
+#include "http_server/http_server.h"
 #include "image_processor.h"
 #include "mdns_service.h"
 #include "memfs.h"
