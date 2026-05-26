@@ -1,5 +1,6 @@
 #include "utils.h"
 
+#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -36,6 +37,114 @@ static const char *TAG = "utils";
 
 // Last image fetch error (transient, not persisted)
 static char last_fetch_error[256] = {0};
+
+static bool lta_service_is_requested(const char *service_no, const char *services_csv)
+{
+    if (!service_no || !service_no[0]) {
+        return false;
+    }
+
+    if (!services_csv || services_csv[0] == '\0') {
+        return true;
+    }
+
+    const char *cursor = services_csv;
+    while (*cursor != '\0') {
+        while (*cursor != '\0' && (isspace((unsigned char) *cursor) || *cursor == ',')) {
+            cursor++;
+        }
+        if (*cursor == '\0') {
+            break;
+        }
+
+        const char *start = cursor;
+        while (*cursor != '\0' && *cursor != ',') {
+            cursor++;
+        }
+
+        const char *end = cursor;
+        while (end > start && isspace((unsigned char) *(end - 1))) {
+            end--;
+        }
+
+        size_t len = (size_t) (end - start);
+        if (len > 0 && strlen(service_no) == len && strncmp(service_no, start, len) == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static void lta_add_estimated_arrival(cJSON *service, const char *key, cJSON *arrivals)
+{
+    if (!service || !key || !arrivals) {
+        return;
+    }
+
+    cJSON *bus = cJSON_GetObjectItem(service, key);
+    if (!bus || !cJSON_IsObject(bus)) {
+        return;
+    }
+
+    cJSON *arrival = cJSON_GetObjectItem(bus, "EstimatedArrival");
+    if (arrival && cJSON_IsString(arrival) && arrival->valuestring && arrival->valuestring[0]) {
+        cJSON_AddItemToArray(arrivals, cJSON_CreateString(arrival->valuestring));
+    }
+}
+
+static cJSON *lta_extract_arrival_timings(cJSON *json, const char *services_csv)
+{
+    if (!json) {
+        return NULL;
+    }
+
+    cJSON *result = cJSON_CreateObject();
+    if (!result) {
+        return NULL;
+    }
+
+    cJSON *services_out = cJSON_AddArrayToObject(result, "services");
+    if (!services_out) {
+        cJSON_Delete(result);
+        return NULL;
+    }
+
+    cJSON *services = cJSON_GetObjectItem(json, "Services");
+    if (!services || !cJSON_IsArray(services)) {
+        return result;
+    }
+
+    cJSON *service = NULL;
+    cJSON_ArrayForEach(service, services)
+    {
+        cJSON *service_no = cJSON_GetObjectItem(service, "ServiceNo");
+        if (!service_no || !cJSON_IsString(service_no) ||
+            !lta_service_is_requested(service_no->valuestring, services_csv)) {
+            continue;
+        }
+
+        cJSON *service_out = cJSON_CreateObject();
+        if (!service_out) {
+            continue;
+        }
+
+        cJSON_AddStringToObject(service_out, "service_no", service_no->valuestring);
+        cJSON *arrivals = cJSON_AddArrayToObject(service_out, "arrivals");
+        if (!arrivals) {
+            cJSON_Delete(service_out);
+            continue;
+        }
+
+        lta_add_estimated_arrival(service, "NextBus", arrivals);
+        lta_add_estimated_arrival(service, "NextBus2", arrivals);
+        lta_add_estimated_arrival(service, "NextBus3", arrivals);
+
+        cJSON_AddItemToArray(services_out, service_out);
+    }
+
+    return result;
+}
 
 void utils_set_last_fetch_error(const char *error)
 {
@@ -505,7 +614,18 @@ esp_err_t fetch_lta_bus_arrivals(const char *bus_stop_code, const char *account_
         goto cleanup;
     }
 
-    *response_out = json;
+    cJSON *filtered = lta_extract_arrival_timings(json, config_manager_get_bus_services());
+    if (!filtered) {
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "Failed to extract LTA arrival timings");
+        }
+        cJSON_Delete(json);
+        err = ESP_ERR_NO_MEM;
+        goto cleanup;
+    }
+
+    cJSON_Delete(json);
+    *response_out = filtered;
     err = ESP_OK;
 
 cleanup:
