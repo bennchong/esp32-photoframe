@@ -14,6 +14,7 @@
 #include "config_manager.h"
 #include "display_manager.h"
 #include "esp_app_desc.h"
+#include "esp_crt_bundle.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
 #include "esp_mac.h"
@@ -27,6 +28,11 @@
 #include "wifi_manager.h"
 
 static const char *TAG = "utils";
+
+#define LTA_BUS_ARRIVAL_URL \
+    "https://datamall2.mytransport.sg/ltaodataservice/v3/BusArrival?BusStopCode=%s"
+#define LTA_BUS_ARRIVAL_TIMEOUT_MS 10000
+#define LTA_BUS_ARRIVAL_MAX_RESPONSE 16384
 
 // Last image fetch error (transient, not persisted)
 static char last_fetch_error[256] = {0};
@@ -360,6 +366,157 @@ static esp_err_t http_event_handler(esp_http_client_event_t *evt)
         break;
     }
     return ESP_OK;
+}
+
+esp_err_t fetch_lta_bus_arrivals(const char *bus_stop_code, const char *account_key,
+                                 cJSON **response_out, int *http_status_out, char *err_out,
+                                 size_t err_out_len)
+{
+    if (response_out == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    *response_out = NULL;
+    if (http_status_out) {
+        *http_status_out = 0;
+    }
+    if (err_out && err_out_len > 0) {
+        err_out[0] = '\0';
+    }
+
+    if (!bus_stop_code || bus_stop_code[0] == '\0') {
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "Bus stop code is required");
+        }
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    const char *effective_key = account_key;
+    if (!effective_key || effective_key[0] == '\0') {
+        effective_key = config_manager_get_lta_account_key();
+    }
+
+    if (!effective_key || effective_key[0] == '\0') {
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "LTA AccountKey is required");
+        }
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    char url[256];
+    int url_len = snprintf(url, sizeof(url), LTA_BUS_ARRIVAL_URL, bus_stop_code);
+    if (url_len < 0 || url_len >= (int) sizeof(url)) {
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "Bus stop code is too long");
+        }
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    esp_http_client_config_t config = {
+        .url = url,
+        .method = HTTP_METHOD_GET,
+        .timeout_ms = LTA_BUS_ARRIVAL_TIMEOUT_MS,
+        .crt_bundle_attach = esp_crt_bundle_attach,
+        .user_agent = "ESP32-PhotoFrame/1.0",
+    };
+
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    if (!client) {
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "Failed to initialize HTTP client");
+        }
+        return ESP_FAIL;
+    }
+
+    esp_http_client_set_header(client, "AccountKey", effective_key);
+    esp_http_client_set_header(client, "Accept", "application/json");
+
+    esp_err_t err = ESP_FAIL;
+    bool opened = false;
+    char *response_buffer = NULL;
+
+    err = esp_http_client_open(client, 0);
+    if (err != ESP_OK) {
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "Failed to open HTTP connection: %s",
+                     esp_err_to_name(err));
+        }
+        goto cleanup;
+    }
+
+    opened = true;
+
+    int content_length = esp_http_client_fetch_headers(client);
+    int status_code = esp_http_client_get_status_code(client);
+    if (http_status_out) {
+        *http_status_out = status_code;
+    }
+
+    if (status_code != 200) {
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "LTA API returned HTTP %d", status_code);
+        }
+        err = ESP_FAIL;
+        goto cleanup;
+    }
+
+    if (content_length <= 0) {
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "Invalid response length");
+        }
+        err = ESP_FAIL;
+        goto cleanup;
+    }
+
+    if (content_length > LTA_BUS_ARRIVAL_MAX_RESPONSE) {
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "LTA response too large");
+        }
+        err = ESP_ERR_INVALID_SIZE;
+        goto cleanup;
+    }
+
+    response_buffer = malloc((size_t) content_length + 1);
+    if (!response_buffer) {
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "Failed to allocate response buffer");
+        }
+        err = ESP_ERR_NO_MEM;
+        goto cleanup;
+    }
+
+    int response_len = esp_http_client_read_response(client, response_buffer, content_length);
+    if (response_len <= 0) {
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "Failed to read LTA response");
+        }
+        err = ESP_FAIL;
+        goto cleanup;
+    }
+
+    response_buffer[response_len] = '\0';
+
+    cJSON *json = cJSON_Parse(response_buffer);
+    if (!json) {
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "Failed to parse LTA response JSON");
+        }
+        err = ESP_FAIL;
+        goto cleanup;
+    }
+
+    *response_out = json;
+    err = ESP_OK;
+
+cleanup:
+    if (response_buffer) {
+        free(response_buffer);
+    }
+    if (opened) {
+        esp_http_client_close(client);
+    }
+    esp_http_client_cleanup(client);
+    return err;
 }
 
 esp_err_t fetch_and_save_image_from_url(const char *url, char *saved_image_path, size_t path_size,
