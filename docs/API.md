@@ -135,7 +135,6 @@ Get current device configuration.
   "bus_services": "",
   "bus_time_start": 0,
   "bus_time_end": 1439,
-  "ha_url": "",
   "openai_api_key": "",
   "google_api_key": "",
   "deep_sleep_enabled": true
@@ -168,7 +167,6 @@ Get current device configuration.
 - `bus_services`: Comma-separated bus service list (empty for all)
 - `bus_time_start`: Start time in minutes since midnight for bus display window
 - `bus_time_end`: End time in minutes since midnight for bus display window
-- `ha_url`: Home Assistant URL for integration
 - `openai_api_key`/`google_api_key`: AI API keys for client-side generation
 - `deep_sleep_enabled`: Enable deep sleep between rotations
 

@@ -399,12 +399,6 @@ esp_err_t apply_config_from_json(cJSON *root)
         config_manager_set_bus_time_end(item->valueint);
     }
 
-    // Home Assistant
-    item = cJSON_GetObjectItem(root, "ha_url");
-    if (item && cJSON_IsString(item)) {
-        config_manager_set_ha_url(cJSON_GetStringValue(item));
-    }
-
     // AI API Keys
     item = cJSON_GetObjectItem(root, "openai_api_key");
     if (item && cJSON_IsString(item)) {

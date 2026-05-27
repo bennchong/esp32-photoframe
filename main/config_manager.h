@@ -122,13 +122,6 @@ void config_manager_set_bus_time_end(int minutes);
 int config_manager_get_bus_time_end(void);
 
 // ============================================================================
-// Home Assistant
-// ============================================================================
-
-void config_manager_set_ha_url(const char *url);
-const char *config_manager_get_ha_url(void);
-
-// ============================================================================
 // AI API Keys
 // ============================================================================
 

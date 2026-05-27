@@ -5,10 +5,9 @@ set(SOURCES
     "config_manager.c"
     "display_manager.c"
     "dns_server.c"
-    "ha_integration.c"
     "http_server/http_server.c"
     "image_processor.c"
-    "main.c"
+    "main.cpp"
     "mdns_service.c"
     "ota_manager.c"
     "periodic_tasks.c"
@@ -51,6 +50,7 @@ set(PRIV_REQUIRES
     memfs
     nvs_flash
     sdcard
+    simplefsm
 )
 
 idf_component_register(

@@ -27,7 +27,6 @@
 #include "esp_vfs.h"
 #include "esp_vfs_fat.h"
 #include "freertos/task.h"
-#include "ha_integration.h"
 #include "image_processor.h"
 #include "nvs_flash.h"
 #include "ota_manager.h"
@@ -541,8 +540,6 @@ static esp_err_t display_image_direct_handler(httpd_req_t *req)
         unlink(temp_png_path);
         unlink(CURRENT_EPD_PATH);
 
-        ha_notify_update();
-
         cJSON *response = cJSON_CreateObject();
         cJSON_AddStringToObject(response, "status", "success");
         char *json_str = cJSON_Print(response);
@@ -828,7 +825,6 @@ static esp_err_t display_image_direct_handler(httpd_req_t *req)
                     return ESP_FAIL;
                 }
 
-                ha_notify_update();
                 ESP_LOGI(TAG, "Image displayed from buffer");
 
                 cJSON *response = cJSON_CreateObject();
@@ -860,8 +856,6 @@ static esp_err_t display_image_direct_handler(httpd_req_t *req)
     unlink(temp_bmp_path);
     unlink(temp_png_path);
     unlink(CURRENT_EPD_PATH);
-
-    ha_notify_update();
 
     ESP_LOGI(TAG, "Image displayed: %s", display_path);
 
@@ -1297,8 +1291,6 @@ static esp_err_t display_image_handler(httpd_req_t *req)
         return ESP_FAIL;
     }
 
-    ha_notify_update();
-
     cJSON *response = cJSON_CreateObject();
     cJSON_AddStringToObject(response, "status", "success");
 
@@ -1470,8 +1462,6 @@ static esp_err_t rotate_handler(httpd_req_t *req)
 
     // Synchronous rotation as requested by maintainer
     trigger_image_rotation();
-    ha_notify_update();
-
     cJSON *response = cJSON_CreateObject();
     cJSON_AddStringToObject(response, "status", "success");
     cJSON_AddStringToObject(response, "message", "Image rotation triggered");
@@ -1654,21 +1644,19 @@ static esp_err_t config_handler(httpd_req_t *req)
 
         // EInk Display - LTA Data Mall
         const char *lta_account_key = config_manager_get_lta_account_key();
-        cJSON_AddStringToObject(root, "lta_account_key",
+        cJSON_AddStringToObject(root,
+                                "lta_account_key",
                                 lta_account_key ? lta_account_key : "");
         cJSON_AddBoolToObject(root, "bus_enabled", config_manager_get_bus_enabled());
         const char *bus_stop_number = config_manager_get_bus_stop_number();
-        cJSON_AddStringToObject(root, "bus_stop_number",
+        cJSON_AddStringToObject(root,
+                                "bus_stop_number",
                                 bus_stop_number ? bus_stop_number : "");
         const char *bus_services = config_manager_get_bus_services();
         cJSON_AddStringToObject(root, "bus_services", bus_services ? bus_services : "");
-        cJSON_AddNumberToObject(root, "bus_time_start",
-                                config_manager_get_bus_time_start());
+        cJSON_AddNumberToObject(
+            root, "bus_time_start", config_manager_get_bus_time_start());
         cJSON_AddNumberToObject(root, "bus_time_end", config_manager_get_bus_time_end());
-
-        // Home Assistant
-        const char *ha_url = config_manager_get_ha_url();
-        cJSON_AddStringToObject(root, "ha_url", ha_url ? ha_url : "");
 
         // AI API Keys
         const char *openai_key = config_manager_get_openai_api_key();

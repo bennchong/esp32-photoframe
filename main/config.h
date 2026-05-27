@@ -19,7 +19,6 @@ typedef enum {
 #define WIFI_SSID_MAX_LEN 32
 #define WIFI_PASS_MAX_LEN 64
 #define IMAGE_URL_MAX_LEN 256
-#define HA_URL_MAX_LEN 256
 #define ROTATION_MODE_MAX_LEN 16
 #define TIMEZONE_MAX_LEN 64
 #define NTP_SERVER_MAX_LEN 128
@@ -36,7 +35,6 @@ typedef enum {
 #define DEFAULT_WIFI_SSID "PhotoFrame"
 #define DEFAULT_WIFI_PASSWORD "photoframe123"
 #define DEFAULT_IMAGE_URL "https://loremflickr.com/800/480"
-#define DEFAULT_HA_URL ""
 #define DEFAULT_TIMEZONE "UTC0"
 #define DEFAULT_NTP_SERVER "pool.ntp.org"
 
@@ -111,9 +109,6 @@ typedef enum {
 
 // Power
 #define NVS_DEEP_SLEEP_KEY "deep_sleep"
-
-// Home Assistant
-#define NVS_HA_URL_KEY "ha_url"
 
 // AI API Keys (for webapp client use)
 #define AI_API_KEY_MAX_LEN 256

@@ -20,7 +20,6 @@
 #include "board_hal.h"
 #include "config.h"
 #include "config_manager.h"
-#include "ha_integration.h"
 #include "periodic_tasks.h"
 #include "storage.h"
 #include "utils.h"
@@ -82,7 +81,6 @@ static void rotation_timer_task(void *arg)
                 ESP_LOGI(TAG, "Active rotation triggered (%s)", reason);
 
                 trigger_image_rotation();
-                ha_notify_update();
 
                 // Schedule next rotation
                 int seconds_until_next = get_seconds_until_next_wakeup();
@@ -306,8 +304,6 @@ void power_manager_enter_sleep(void)
     power_manager_disable_auto_light_sleep();
 
     ESP_LOGI(TAG, "Preparing to enter deep sleep mode");
-
-    ha_notify_offline();
 
     // Turn off LEDs before sleep
     board_hal_led_set(BOARD_HAL_LED_POWER, false);
