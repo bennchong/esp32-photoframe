@@ -305,7 +305,7 @@ void deep_sleep_wake_main(wakeup_source_t wakeup_src)
     }
 
     // After time sync (or if no WiFi needed), also check sleep schedule.
-    // This handles the case where WiFi/HA is not configured but time was
+    // This handles the case where WiFi is not configured but time was
     // restored from external RTC.
     // Exception: ROTATE button press always rotates, even during sleep schedule.
     if (!is_button_wake && config_manager_is_in_sleep_schedule()) {
