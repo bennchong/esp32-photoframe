@@ -1,3 +1,9 @@
+/**
+ * @file utils.h
+ * @brief Shared helpers for configuration, rotation, and system utilities.
+ * @ingroup utils
+ */
+
 #ifndef UTILS_H
 #define UTILS_H
 
@@ -34,9 +40,13 @@ const char *utils_consume_cert_pin_error(void);
 esp_err_t fetch_and_save_image_from_url(const char *url, char *saved_image_path, size_t path_size,
                                         bool *not_modified);
 
-// Trigger image rotation based on configured rotation mode
-// Handles both URL and SD card rotation modes
-// Returns ESP_OK on success, error code on failure
+/**
+ * @brief Trigger image rotation based on configured rotation mode.
+ *
+ * @details Handles both URL and SD card rotation modes.
+ * @return ESP_OK on success, error code on failure.
+ * @see flow_photo_change
+ */
 esp_err_t trigger_image_rotation(void);
 
 // Create battery status JSON object with all battery fields

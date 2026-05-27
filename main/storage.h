@@ -1,3 +1,9 @@
+/**
+ * @file storage.h
+ * @brief Persistent storage abstraction and formatting.
+ * @ingroup storage
+ */
+
 #pragma once
 
 #include <esp_err.h>

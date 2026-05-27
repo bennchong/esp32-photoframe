@@ -1,3 +1,9 @@
+/**
+ * @file wifi_manager.h
+ * @brief Wi-Fi connectivity and provisioning helpers.
+ * @ingroup network
+ */
+
 #ifndef WIFI_MANAGER_H
 #define WIFI_MANAGER_H
 
