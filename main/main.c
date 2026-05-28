@@ -74,6 +74,12 @@ static esp_err_t sntp_sync_periodic_callback(void)
         localtime_r(&now, &timeinfo);
     }
 
+    static esp_err_t power_log_periodic_callback(void)
+    {
+        ESP_LOGI(TAG, "Periodic power log triggered");
+        return power_manager_log_battery_level();
+    }
+
     if (timeinfo.tm_year >= (2025 - 1900)) {
         char strftime_buf[64];
         strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
@@ -440,6 +446,11 @@ void app_main(void)
     ESP_ERROR_CHECK(
         periodic_tasks_register(SNTP_TASK_NAME, sntp_sync_periodic_callback, 24 * 60 * 60));
     ESP_LOGI(TAG, "Registered SNTP sync as daily task");
+
+    // Register daily power logging task
+    ESP_ERROR_CHECK(
+        periodic_tasks_register(POWER_LOG_TASK_NAME, power_log_periodic_callback, 24 * 60 * 60));
+    ESP_LOGI(TAG, "Registered power log as daily task");
 
     ESP_ERROR_CHECK(image_processor_init());
 

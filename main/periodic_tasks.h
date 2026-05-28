@@ -15,6 +15,7 @@
 // Periodic tasks names
 #define SNTP_TASK_NAME "sntp_sync"
 #define OTA_CHECK_TASK_NAME "ota_check"
+#define POWER_LOG_TASK_NAME "power_log"
 
 /**
  * @brief Periodic task callback function type

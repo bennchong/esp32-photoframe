@@ -276,6 +276,16 @@ esp_err_t apply_config_from_json(cJSON *root)
         power_manager_set_deep_sleep_enabled(cJSON_IsTrue(item));
     }
 
+    item = cJSON_GetObjectItem(root, "power_logging_enabled");
+    if (item && cJSON_IsBool(item)) {
+        bool old_enabled = config_manager_get_power_logging_enabled();
+        bool new_enabled = cJSON_IsTrue(item);
+        config_manager_set_power_logging_enabled(new_enabled);
+        if (!old_enabled && new_enabled) {
+            periodic_tasks_force_run(POWER_LOG_TASK_NAME);
+        }
+    }
+
     return ESP_OK;
 }
 

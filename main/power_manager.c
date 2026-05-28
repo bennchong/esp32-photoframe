@@ -1,5 +1,7 @@
 #include "power_manager.h"
 
+#include <stdio.h>
+#include <unistd.h>
 #include <driver/gpio.h>
 #include <driver/rtc_io.h>
 #include <esp_log.h>
@@ -402,4 +404,48 @@ void power_manager_set_deep_sleep_enabled(bool enabled)
 
     // Update power LED: on when deep sleep enabled, off when disabled
     board_hal_led_set(BOARD_HAL_LED_POWER, enabled);
+}
+
+esp_err_t power_manager_log_battery_level(void)
+{
+    if (!config_manager_get_power_logging_enabled()) {
+        ESP_LOGD(TAG, "Power logging is disabled");
+        return ESP_OK;
+    }
+
+    if (storage_get_type() != STORAGE_TYPE_SDCARD) {
+        ESP_LOGI(TAG, "Skipping power log: SD card storage not active");
+        return ESP_OK;
+    }
+
+    time_t now;
+    struct tm timeinfo;
+    time(&now);
+    localtime_r(&now, &timeinfo);
+
+    char timestamp[32];
+    if (strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", &timeinfo) == 0) {
+        ESP_LOGE(TAG, "Failed to format timestamp for power log");
+        return ESP_FAIL;
+    }
+
+    int battery_level = board_hal_get_battery_percent();
+
+    const char *path = FS_MOUNT_POINT "/power_log.csv";
+    bool file_exists = (access(path, F_OK) == 0);
+    FILE *fp = fopen(path, "a");
+    if (!fp) {
+        ESP_LOGE(TAG, "Failed to open power log CSV: %s", path);
+        return ESP_FAIL;
+    }
+
+    if (!file_exists) {
+        fprintf(fp, "time,battery_level\n");
+    }
+
+    fprintf(fp, "%s,%d\n", timestamp, battery_level);
+    fclose(fp);
+
+    ESP_LOGI(TAG, "Logged daily battery level to %s (%d%%)", path, battery_level);
+    return ESP_OK;
 }

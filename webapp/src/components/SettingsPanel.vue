@@ -331,6 +331,7 @@ async function performFactoryReset() {
         <v-tab value="general"> General </v-tab>
         <v-tab value="autoRotate"> Auto Rotate </v-tab>
         <v-tab value="power"> Power </v-tab>
+        <v-tab value="logging"> Logging </v-tab>
         <v-tab value="homeAssistant"> Home Assistant </v-tab>
         <v-tab value="processing"> Processing </v-tab>
         <v-tab value="ai"> AI Generation </v-tab>
@@ -685,6 +686,21 @@ async function performFactoryReset() {
                 power consumption. Only disable if permanently powered via USB.
               </v-alert>
             </v-expand-transition>
+          </v-tabs-window-item>
+
+          <!-- Logging Tab -->
+          <v-tabs-window-item value="logging">
+            <v-switch
+              v-model="settingsStore.deviceSettings.powerLoggingEnabled"
+              label="Enable Daily Power Logging"
+              color="primary"
+              class="mb-4"
+            />
+
+            <v-alert type="info" variant="tonal" density="compact">
+              Records one battery-level sample per day to <code>/storage/power_log.csv</code> when SD
+              storage is active.
+            </v-alert>
           </v-tabs-window-item>
 
           <!-- Home Assistant Tab -->

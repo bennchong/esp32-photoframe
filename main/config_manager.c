@@ -54,6 +54,7 @@ static char google_api_key[AI_API_KEY_MAX_LEN] = {0};
 
 // Power
 static bool deep_sleep_enabled = true;  // Enabled by default
+static bool power_logging_enabled = false;
 
 // Config sync
 static int64_t config_last_updated = 0;
@@ -278,6 +279,13 @@ esp_err_t config_manager_init(void)
             deep_sleep_enabled = (deep_sleep_val != 0);
             ESP_LOGI(TAG, "Loaded deep sleep setting from NVS: %s",
                      deep_sleep_enabled ? "enabled" : "disabled");
+        }
+
+        uint8_t power_logging_val = 0;  // Default to disabled
+        if (nvs_get_u8(nvs_handle, NVS_POWER_LOGGING_KEY, &power_logging_val) == ESP_OK) {
+            power_logging_enabled = (power_logging_val != 0);
+            ESP_LOGI(TAG, "Loaded power logging setting from NVS: %s",
+                     power_logging_enabled ? "enabled" : "disabled");
         }
 
         // Config sync timestamp
@@ -970,6 +978,25 @@ void config_manager_set_deep_sleep_enabled(bool enabled)
 bool config_manager_get_deep_sleep_enabled(void)
 {
     return deep_sleep_enabled;
+}
+
+void config_manager_set_power_logging_enabled(bool enabled)
+{
+    power_logging_enabled = enabled;
+
+    nvs_handle_t nvs_handle;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle) == ESP_OK) {
+        nvs_set_u8(nvs_handle, NVS_POWER_LOGGING_KEY, enabled ? 1 : 0);
+        nvs_commit(nvs_handle);
+        nvs_close(nvs_handle);
+    }
+
+    ESP_LOGI(TAG, "Power logging %s", enabled ? "enabled" : "disabled");
+}
+
+bool config_manager_get_power_logging_enabled(void)
+{
+    return power_logging_enabled;
 }
 
 void config_manager_set_config_last_updated(int64_t timestamp)

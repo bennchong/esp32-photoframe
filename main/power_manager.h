@@ -56,4 +56,9 @@ wakeup_source_t power_manager_get_wakeup_source(void);
  */
 void power_manager_set_deep_sleep_enabled(bool enabled);
 
+/**
+ * @brief Append a timestamped battery-level sample to the SD-card CSV log.
+ */
+esp_err_t power_manager_log_battery_level(void);
+
 #endif
