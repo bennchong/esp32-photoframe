@@ -698,8 +698,8 @@ async function performFactoryReset() {
             />
 
             <v-alert type="info" variant="tonal" density="compact">
-              Records one battery-level sample per day to <code>/storage/power_log.csv</code> when SD
-              storage is active.
+              Records one battery-level sample per day to <code>/storage/power_log.csv</code> when
+              SD storage is active.
             </v-alert>
           </v-tabs-window-item>
 

@@ -1,7 +1,5 @@
 #include "power_manager.h"
 
-#include <stdio.h>
-#include <unistd.h>
 #include <driver/gpio.h>
 #include <driver/rtc_io.h>
 #include <esp_log.h>
@@ -13,7 +11,9 @@
 #include <freertos/task.h>
 #include <nvs.h>
 #include <nvs_flash.h>
+#include <stdio.h>
 #include <time.h>
+#include <unistd.h>
 
 #if CONFIG_SOC_USB_SERIAL_JTAG_SUPPORTED
 #include <hal/usb_serial_jtag_ll.h>
