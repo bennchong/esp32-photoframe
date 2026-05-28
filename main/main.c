@@ -42,6 +42,7 @@
 #include "periodic_tasks.h"
 #include "power_manager.h"
 #include "processing_settings.h"
+#include "simple_fsm.h"
 #include "splash_screen.h"
 #include "storage.h"
 #include "utils.h"
@@ -289,6 +290,46 @@ void deep_sleep_wake_main(wakeup_source_t wakeup_src)
         // Won't reach here after sleep
     }
 
+    typedef struct {
+        wakeup_source_t wakeup_src;
+        bool continue_normal_boot;
+    } wakeup_fsm_context_t;
+
+    static void wakeup_router_state(simple_fsm_t * fsm, void *context)
+    {
+        wakeup_fsm_context_t *wakeup_ctx = (wakeup_fsm_context_t *) context;
+
+        switch (wakeup_ctx->wakeup_src) {
+        case WAKEUP_SOURCE_CLEAR_BUTTON:
+            ESP_LOGI(TAG, "CLEAR button wakeup detected - clearing display and sleeping");
+            board_hal_init();             // Ensure HAL is active
+            display_manager_init();       // Initialize display
+            display_manager_clear();      // Clear screen
+            power_manager_enter_sleep();  // Go back to sleep
+            // Won't reach here
+            break;
+
+        case WAKEUP_SOURCE_TIMER:
+        case WAKEUP_SOURCE_ROTATE_BUTTON:
+            ESP_LOGI(TAG, "Entering deep sleep wake path (timer or rotate button)");
+            deep_sleep_wake_main(wakeup_ctx->wakeup_src);
+            // Won't reach here after sleep
+            break;
+
+        case WAKEUP_SOURCE_BOOT_BUTTON:
+            ESP_LOGI(TAG, "BOOT button wakeup detected - starting WiFi and HTTP server");
+            wakeup_ctx->continue_normal_boot = true;
+            break;
+
+        default:
+            // Cold boot or other wakeup - continue with normal initialization
+            wakeup_ctx->continue_normal_boot = true;
+            break;
+        }
+
+        simple_fsm_stop(fsm);
+    }
+
     // Trigger rotation
     power_manager_reset_sleep_timer();
     trigger_image_rotation();
@@ -459,31 +500,16 @@ void app_main(void)
     wakeup_source_t wakeup_src = power_manager_get_wakeup_source();
     ESP_LOGI(TAG, "Wake-up source: %d", wakeup_src);
 
-    switch (wakeup_src) {
-    case WAKEUP_SOURCE_CLEAR_BUTTON:
-        ESP_LOGI(TAG, "CLEAR button wakeup detected - clearing display and sleeping");
-        board_hal_init();             // Ensure HAL is active
-        display_manager_init();       // Initialize display
-        display_manager_clear();      // Clear screen
-        power_manager_enter_sleep();  // Go back to sleep
-        // Won't reach here
-        break;
+    wakeup_fsm_context_t wakeup_ctx = {
+        .wakeup_src = wakeup_src,
+        .continue_normal_boot = false,
+    };
+    simple_fsm_t wakeup_fsm;
+    simple_fsm_init(&wakeup_fsm, wakeup_router_state);
+    simple_fsm_run(&wakeup_fsm, &wakeup_ctx);
 
-    case WAKEUP_SOURCE_TIMER:
-    case WAKEUP_SOURCE_ROTATE_BUTTON:
-        ESP_LOGI(TAG, "Entering deep sleep wake path (timer or rotate button)");
-        deep_sleep_wake_main(wakeup_src);
-        // Won't reach here after sleep
-        break;
-
-    case WAKEUP_SOURCE_BOOT_BUTTON:
-        ESP_LOGI(TAG, "BOOT button wakeup detected - starting WiFi and HTTP server");
-        // Continue with normal initialization
-        break;
-
-    default:
-        // Cold boot or other wakeup - continue with normal initialization
-        break;
+    if (!wakeup_ctx.continue_normal_boot) {
+        return;
     }
 
     ESP_ERROR_CHECK(wifi_manager_init());

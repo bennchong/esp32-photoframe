@@ -51,6 +51,7 @@ set(PRIV_REQUIRES
     memfs
     nvs_flash
     sdcard
+    simplefsm
 )
 
 idf_component_register(
