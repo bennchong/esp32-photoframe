@@ -20,6 +20,7 @@ typedef enum {
     BOARD_TYPE_WAVESHARE_PHOTOPAINTER,
     BOARD_TYPE_SEEEDSTUDIO_XIAO_EE02,
     BOARD_TYPE_SEEEDSTUDIO_XIAO_EE04,
+    BOARD_TYPE_SEEEDSTUDIO_XIAO_EE04_ESP32C5,
     BOARD_TYPE_SEEEDSTUDIO_RETERMINAL_E1002,
     BOARD_TYPE_UNKNOWN
 } board_type_t;
@@ -30,6 +31,8 @@ typedef enum {
 #include "board_seeedstudio_xiao_ee02.h"
 #elif defined(CONFIG_BOARD_DRIVER_SEEEDSTUDIO_XIAO_EE04)
 #include "board_seeedstudio_xiao_ee04.h"
+#elif defined(CONFIG_BOARD_DRIVER_SEEEDSTUDIO_XIAO_EE04_ESP32C5)
+#include "board_seeedstudio_xiao_ee04_esp32c5.h"
 #elif defined(CONFIG_BOARD_DRIVER_SEEEDSTUDIO_RETERMINAL_E1002)
 #include "board_seeedstudio_reterminal_e1002.h"
 #else

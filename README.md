@@ -1,6 +1,6 @@
 # ESP32 PhotoFrame
 
-A modern, feature-rich firmware for ESP32-based e-paper photo frames (currently supporting **Waveshare PhotoPainter**, **Seeed Studio XIAO EE02/EE04**, and **Seeed Studio reTerminal E1002**). This firmware replaces stock firmware with a powerful RESTful API, web interface, and **significantly better image quality**.
+A modern, feature-rich firmware for ESP32-based e-paper photo frames (currently supporting **Waveshare PhotoPainter**, **Seeed Studio XIAO EE02/EE04/EE04 (ESP32-C5)**, and **Seeed Studio reTerminal E1002**). This firmware replaces stock firmware with a powerful RESTful API, web interface, and **significantly better image quality**.
 
 ![PhotoFrame](.img/esp32-photoframe.png)
 
@@ -104,6 +104,7 @@ Configure your API keys in **Settings > AI Generation**.
 | [Waveshare PhotoPainter](https://www.waveshare.com/wiki/ESP32-S3-PhotoPainter) | 7.3" 7-color | SD card (SDIO) | `waveshare_photopainter_73` |
 | [Seeed Studio XIAO EE02](https://www.seeedstudio.com/XIAO-ePaper-DIY-Kit-EE02-for-13-3-Spectratm-6-E-Ink.html) | 13.3" 6-color | Internal flash | `seeedstudio_xiao_ee02` |
 | [Seeed Studio XIAO EE04](https://www.seeedstudio.com/XIAO-ePaper-EE04-DIY-Bundle-Kit.html) | 7.3" 6-color | Internal flash | `seeedstudio_xiao_ee04` |
+| [Seeed Studio XIAO EE04 (ESP32-C5)](https://www.seeedstudio.com/XIAO-ePaper-EE04-DIY-Bundle-Kit.html) | 7.3" 6-color | Internal flash | `seeedstudio_xiao_ee04_esp32c5` |
 | [Seeed Studio reTerminal E1002](https://www.seeedstudio.com/reTerminal-E1002-p-6533.html) | 7.3" 6-color | SD card (SPI) + Internal flash | `seeedstudio_reterminal_e1002` |
 
 The reTerminal E1002 also includes a SHT40 temperature/humidity sensor, PCF8563 RTC, and battery monitoring.
@@ -114,7 +115,7 @@ Buttons behave differently depending on whether the device is awake (web UI acce
 
 **When in deep sleep:**
 
-| Button | Waveshare PhotoPainter | XIAO EE02 / EE04 | reTerminal E1002 |
+| Button | Waveshare PhotoPainter | XIAO EE02 / EE04 / EE04 (ESP32-C5) | reTerminal E1002 |
 |--------|----------------------|-------------------|------------------|
 | **Wake** | BOOT button | Button 3 | Green button |
 | **Rotate** | KEY button | Button 1 | Left button |
@@ -137,7 +138,7 @@ Boards with larger flash chips (XIAO EE02/EE04, reTerminal E1002) use internal f
 ### Known Issues 🚧
 
 - **PhotoPainter Restarts**: All existing Waveshare PhotoPainter boards on the market use the AXP2101 power management IC, which causes unexplained restarts when connected to both Type-C and a lithium battery simultaneously. **Workaround:** use either USB power only or battery only. Using both at the same time may cause frequent firmware restarts due to unstable power supply. Waveshare has confirmed this issue and future boards will ship with TG28 as a replacement, which will not have this problem. See [waveshareteam/ESP32-S3-PhotoPainter#5](https://github.com/waveshareteam/ESP32-S3-PhotoPainter/issues/5#issuecomment-3876269519) for details.
-- **Seeed Studio Deep Sleep & USB Power**: The XIAO EE02, XIAO EE04, and reTerminal E1002 can only detect USB connections from a **PC** (via USB-Serial-JTAG SOF packets). Chargers and power banks will **not** keep the device awake — it will enter deep sleep as normal. This is a hardware limitation: these boards do not route USB VBUS to an ESP32 GPIO. The Waveshare PhotoPainter does not have this limitation as it uses the AXP2101 PMIC for USB power detection. **Workaround:** If you want the device to stay always accessible while powered by a charger or power bank, disable deep sleep in **Settings > General**.
+- **Seeed Studio Deep Sleep & USB Power**: The XIAO EE02, XIAO EE04, XIAO EE04 (ESP32-C5), and reTerminal E1002 can only detect USB connections from a **PC** (via USB-Serial-JTAG SOF packets where supported). Chargers and power banks will **not** keep the device awake — it will enter deep sleep as normal. This is a hardware limitation: these boards do not route USB VBUS to an ESP32 GPIO. The Waveshare PhotoPainter does not have this limitation as it uses the AXP2101 PMIC for USB power detection. **Workaround:** If you want the device to stay always accessible while powered by a charger or power bank, disable deep sleep in **Settings > General**.
 
 ## Installation
 
@@ -150,7 +151,7 @@ Boards with larger flash chips (XIAO EE02/EE04, reTerminal E1002) use internal f
 Download from [Releases](https://github.com/aitjcize/esp32-photoframe/releases):
 
 ```bash
-esptool.py --chip esp32s3 --port /dev/ttyUSB0 --baud 921600 write_flash 0x0 photoframe-firmware-<board>-merged.bin
+esptool.py --chip <esp32s3|esp32c5> --port /dev/ttyUSB0 --baud 921600 write_flash 0x0 photoframe-firmware-<board>-merged.bin
 ```
 
 **Device not detected?** Hold BOOT button + press PWR to enter download mode.
@@ -168,6 +169,9 @@ We provide a `build.py` helper script to simplify building for different boards.
 
 # Build for Seeed Studio XIAO EE04
 ./build.py --board seeedstudio_xiao_ee04
+
+# Build for Seeed Studio XIAO EE04 (ESP32-C5)
+./build.py --board seeedstudio_xiao_ee04_esp32c5
 
 # Build for Seeed Studio reTerminal E1002
 ./build.py --board seeedstudio_reterminal_e1002

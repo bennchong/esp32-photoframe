@@ -1,0 +1,216 @@
+#include "board_hal.h"
+#include "driver/gpio.h"
+#include "driver/spi_master.h"
+#include "epaper.h"
+#include "esp_adc/adc_oneshot.h"
+#include "esp_log.h"
+#include "esp_sleep.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "soc/soc_caps.h"
+
+#if SOC_USB_SERIAL_JTAG_SUPPORTED
+#include "driver/usb_serial_jtag.h"
+#endif
+
+static const char *TAG = "board_hal_ee04_c5";
+
+// Pin Definitions for XIAO EE04 ESP32-C5 variant
+// Battery voltage is read on IO1 (A0) via a 1:2 voltage divider.
+#define VBAT_ADC_CHANNEL ADC_CHANNEL_0
+#define VBAT_VOLTAGE_DIVIDER 2.0f
+#define VBAT_ADC_ENABLE_PIN GPIO_NUM_6  // TPS22916 enable - must be HIGH to read battery voltage
+
+static adc_oneshot_unit_handle_t adc_handle = NULL;
+
+esp_err_t board_hal_init(void)
+{
+    ESP_LOGI(TAG, "Initializing XIAO EE04 ESP32-C5 Board HAL");
+
+    gpio_hold_dis(VBAT_ADC_ENABLE_PIN);
+
+    // Initialize SPI bus
+    ESP_LOGI(TAG, "Initializing SPI bus...");
+    spi_bus_config_t bus_cfg = {
+        .mosi_io_num = BOARD_HAL_SPI_MOSI_PIN,
+        .miso_io_num = -1,
+        .sclk_io_num = BOARD_HAL_SPI_SCLK_PIN,
+        .quadwp_io_num = -1,
+        .quadhd_io_num = -1,
+        .max_transfer_sz = 800 * 480 / 2 + 100,
+    };
+    ESP_ERROR_CHECK(spi_bus_initialize(SPI2_HOST, &bus_cfg, SPI_DMA_CH_AUTO));
+
+    // Initialize E-Paper Display Port
+    epaper_config_t ep_cfg = {
+        .spi_host = SPI2_HOST,
+        .pin_cs = BOARD_HAL_EPD_CS_PIN,
+        .pin_dc = BOARD_HAL_EPD_DC_PIN,
+        .pin_rst = BOARD_HAL_EPD_RST_PIN,
+        .pin_busy = BOARD_HAL_EPD_BUSY_PIN,
+        .pin_cs1 = -1,
+        .pin_enable = BOARD_HAL_EPD_ENABLE_PIN,
+    };
+    epaper_init(&ep_cfg);
+
+    // Initialize ADC for battery voltage
+    adc_oneshot_unit_init_cfg_t init_config = {
+        .unit_id = ADC_UNIT_1,
+        .clk_src = ADC_DIGI_CLK_SRC_DEFAULT,
+    };
+    esp_err_t ret = adc_oneshot_new_unit(&init_config, &adc_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "ADC init failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    adc_oneshot_chan_cfg_t config = {
+        .bitwidth = ADC_BITWIDTH_DEFAULT,
+        .atten = ADC_ATTEN_DB_12,
+    };
+    ret = adc_oneshot_config_channel(adc_handle, VBAT_ADC_CHANNEL, &config);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "ADC channel config failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    // Configure ADC enable pin (TPS22916 load switch)
+    gpio_config_t io_conf = {
+        .pin_bit_mask = (1ULL << VBAT_ADC_ENABLE_PIN),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&io_conf);
+    gpio_set_level(VBAT_ADC_ENABLE_PIN, 0);
+
+    return ESP_OK;
+}
+
+esp_err_t board_hal_prepare_for_sleep(void)
+{
+    ESP_LOGI(TAG, "Preparing EE04 ESP32-C5 for sleep");
+
+    epaper_enter_deepsleep();
+
+    gpio_set_direction(VBAT_ADC_ENABLE_PIN, GPIO_MODE_OUTPUT);
+    gpio_set_level(VBAT_ADC_ENABLE_PIN, 0);
+    gpio_hold_en(VBAT_ADC_ENABLE_PIN);
+    gpio_deep_sleep_hold_en();
+
+    // Disable ADC to save power
+    if (adc_handle) {
+        adc_oneshot_del_unit(adc_handle);
+        adc_handle = NULL;
+    }
+
+    return ESP_OK;
+}
+
+bool board_hal_is_battery_connected(void)
+{
+    int voltage = board_hal_get_battery_voltage();
+    return voltage > 2500;
+}
+
+int board_hal_get_battery_voltage(void)
+{
+    if (!adc_handle)
+        return -1;
+
+    // Enable TPS22916 load switch to connect voltage divider to ADC
+    gpio_set_level(VBAT_ADC_ENABLE_PIN, 1);
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    int adc_raw;
+    int result = -1;
+    if (adc_oneshot_read(adc_handle, VBAT_ADC_CHANNEL, &adc_raw) == ESP_OK) {
+        float voltage_mv = (float) adc_raw * (3300.0f / 4095.0f) * VBAT_VOLTAGE_DIVIDER;
+        result = (int) voltage_mv;
+    }
+
+    // Disable TPS22916 to save power
+    gpio_set_level(VBAT_ADC_ENABLE_PIN, 0);
+
+    return result;
+}
+
+int board_hal_get_battery_percent(void)
+{
+    int voltage = board_hal_get_battery_voltage();
+    if (voltage < 0)
+        return -1;
+
+    // Simple linear approximation for LiPo
+    // 4.2V = 100%, 3.3V = 0%
+    if (voltage >= 4200)
+        return 100;
+    if (voltage <= 3300)
+        return 0;
+
+    return (voltage - 3300) * 100 / (4200 - 3300);
+}
+
+bool board_hal_is_charging(void)
+{
+    // TODO: Read BQ24070 charging status from its CHRG GPIO pin.
+    return false;
+}
+
+bool board_hal_is_usb_connected(void)
+{
+#if SOC_USB_SERIAL_JTAG_SUPPORTED
+    return usb_serial_jtag_is_connected();
+#else
+    return false;
+#endif
+}
+
+void board_hal_shutdown(void)
+{
+    ESP_LOGI(TAG, "Shutdown not supported on BQ24070, entering deep sleep instead");
+    board_hal_prepare_for_sleep();
+    esp_deep_sleep_start();
+}
+
+esp_err_t board_hal_rtc_init(void)
+{
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t board_hal_rtc_get_time(time_t *t)
+{
+    (void) t;
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t board_hal_rtc_set_time(time_t t)
+{
+    (void) t;
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+bool board_hal_rtc_is_available(void)
+{
+    return false;
+}
+
+esp_err_t board_hal_get_temperature(float *t)
+{
+    (void) t;
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t board_hal_get_humidity(float *h)
+{
+    (void) h;
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+void board_hal_led_set(board_hal_led_t led, bool on)
+{
+    // No onboard LED on XIAO EE04
+    (void) led;
+    (void) on;
+}

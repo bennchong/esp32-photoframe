@@ -40,6 +40,9 @@ cd ..
 # Build for Seeed Studio XIAO EE04 (7.3" 6-color e-paper)
 ./build.py --board seeedstudio_xiao_ee04
 
+# Build for Seeed Studio XIAO EE04 (ESP32-C5)
+./build.py --board seeedstudio_xiao_ee04_esp32c5
+
 # Clean build (optional)
 ./build.py --board waveshare_photopainter_73 --fullclean
 ```

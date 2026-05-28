@@ -40,6 +40,17 @@ menu "Board Configuration"
                 No SD card support.
                 AI rotation mode disabled due to limited PSRAM.
 
+        config BOARD_DRIVER_SEEEDSTUDIO_XIAO_EE04_ESP32C5
+            bool "Seeed XIAO EE04 (ESP32-C5, 7.3in Spectra 6)"
+            select EP_DRIVER_ED2208_GCA
+            help
+                Driver for Seeed Studio XIAO EE04 board variant with ESP32-C5.
+                Uses BQ24070 Linear Charger.
+                Voltage is read via ADC. Percentage is estimated.
+                Charging status via GPIO.
+                No SD card support.
+                AI rotation mode disabled due to limited PSRAM.
+
         config BOARD_DRIVER_SEEEDSTUDIO_RETERMINAL_E1002
             bool "Seeed reTerminal E1002 (Spectra E6)"
             select SDCARD_DRIVER_SPI
@@ -55,7 +66,7 @@ menu "Board Configuration"
 
     config USE_INTERNAL_FLASH_STORAGE
         bool "Use internal flash as storage (LittleFS)"
-        default y if BOARD_DRIVER_SEEEDSTUDIO_XIAO_EE02 || BOARD_DRIVER_SEEEDSTUDIO_XIAO_EE04 || BOARD_DRIVER_SEEEDSTUDIO_RETERMINAL_E1002
+        default y if BOARD_DRIVER_SEEEDSTUDIO_XIAO_EE02 || BOARD_DRIVER_SEEEDSTUDIO_XIAO_EE04 || BOARD_DRIVER_SEEEDSTUDIO_XIAO_EE04_ESP32C5 || BOARD_DRIVER_SEEEDSTUDIO_RETERMINAL_E1002
         default n
         help
             Mounts a LittleFS partition from internal flash to use as storage.

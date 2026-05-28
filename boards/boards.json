@@ -24,6 +24,14 @@
     "url": "https://www.seeedstudio.com/XIAO-ePaper-EE04-DIY-Bundle-Kit.html"
   },
   {
+    "id": "seeedstudio_xiao_ee04_esp32c5",
+    "label": "Seeed Studio XIAO EE04 (ESP32-C5)",
+    "display": "7.3\" 6-color",
+    "resolution": [800, 480],
+    "storage": "Internal flash",
+    "url": "https://www.seeedstudio.com/XIAO-ePaper-EE04-DIY-Bundle-Kit.html"
+  },
+  {
     "id": "seeedstudio_reterminal_e1002",
     "label": "Seeed Studio reTerminal E1002",
     "display": "7.3\" 6-color",
