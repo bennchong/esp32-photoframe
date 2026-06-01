@@ -303,6 +303,13 @@ esp_err_t power_manager_init(void)
 
 void power_manager_enter_sleep(void)
 {
+#ifdef DEVELOPMENT_MODE
+    ESP_LOGW(TAG, "Development mode: would enter deep sleep now (skipped)");
+    ESP_LOGI(TAG, "Development mode: waking up (deep sleep skipped)");
+    power_manager_reset_sleep_timer();
+    return;
+#endif
+
     power_manager_disable_auto_light_sleep();
 
     ESP_LOGI(TAG, "Preparing to enter deep sleep mode");

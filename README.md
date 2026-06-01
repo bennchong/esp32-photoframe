@@ -172,6 +172,9 @@ We provide a `build.py` helper script to simplify building for different boards.
 # Build for Seeed Studio reTerminal E1002
 ./build.py --board seeedstudio_reterminal_e1002
 
+# Build without deep sleep (development mode)
+./build.py --board waveshare_photopainter_73 --dev-mode
+
 # Flash the firmware
 idf.py -p /dev/ttyUSB0 flash monitor
 ```

@@ -26,6 +26,12 @@ message(STATUS "Firmware version: ${FIRMWARE_VERSION}")
 add_compile_options(-Wno-missing-field-initializers)
 add_compile_definitions(FIRMWARE_VERSION="${FIRMWARE_VERSION}")
 
+option(DEVELOPMENT_MODE "Disable deep sleep for development builds" OFF)
+if(DEVELOPMENT_MODE)
+    message(STATUS "Development mode enabled (deep sleep will be skipped)")
+    add_compile_definitions(DEVELOPMENT_MODE=1)
+endif()
+
 # Generate partitions.csv by reading config from sdkconfig / defaults files.
 set(_config_files "")
 if(DEFINED SDKCONFIG_DEFAULTS)

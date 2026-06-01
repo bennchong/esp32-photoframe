@@ -110,10 +110,18 @@ def main():
         help="Run only specific step(s). Can be specified multiple times. "
              "If omitted, all steps run.",
     )
+    parser.add_argument(
+        "--dev-mode",
+        action="store_true",
+        help="Disable deep sleep and log simulated sleep/wake events",
+    )
     # Allow passing extra arguments to idf.py
     args, extra_args = parser.parse_known_args()
 
     steps = args.step if args.step else STEPS
+
+    if args.dev_mode:
+        extra_args.append("-DDEVELOPMENT_MODE=ON")
 
     if args.fullclean:
         print("Performing full clean...")

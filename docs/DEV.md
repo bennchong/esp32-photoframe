@@ -40,6 +40,9 @@ cd ..
 # Build for Seeed Studio XIAO EE04 (7.3" 6-color e-paper)
 ./build.py --board seeedstudio_xiao_ee04
 
+# Build without deep sleep (development mode)
+./build.py --board waveshare_photopainter_73 --dev-mode
+
 # Clean build (optional)
 ./build.py --board waveshare_photopainter_73 --fullclean
 ```
