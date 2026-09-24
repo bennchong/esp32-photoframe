@@ -1,5 +1,9 @@
 #include "testable_utils.h"
 
+#include <ctype.h>
+#include <stdio.h>
+#include <string.h>
+
 int calculate_next_wakeup_interval(const struct tm *timeinfo, int rotate_interval, bool aligned,
                                    const sleep_schedule_config_t *sleep_schedule)
 {
@@ -97,4 +101,114 @@ int calculate_next_wakeup_interval(const struct tm *timeinfo, int rotate_interva
     }
 
     return seconds_until_wake;
+}
+
+int parse_bus_service_list(const char *csv, char services[][BUS_SERVICE_NO_LEN], int max_services)
+{
+    int count = 0;
+    const char *cursor = csv;
+
+    while (cursor && *cursor && count < max_services) {
+        const char *end = strchr(cursor, ',');
+        if (!end) {
+            end = cursor + strlen(cursor);
+        }
+
+        const char *first = cursor;
+        const char *last = end;
+        while (first < last && isspace((unsigned char) *first)) {
+            first++;
+        }
+        while (last > first && isspace((unsigned char) last[-1])) {
+            last--;
+        }
+
+        size_t len = (size_t) (last - first);
+        if (len > 0 && len < BUS_SERVICE_NO_LEN) {
+            memcpy(services[count], first, len);
+            services[count][len] = '\0';
+            count++;
+        }
+
+        cursor = *end ? end + 1 : end;
+    }
+
+    return count;
+}
+
+// Days from 1970-01-01 to a proleptic Gregorian date (Howard Hinnant's days_from_civil)
+static long long days_from_civil(int year, int month, int day)
+{
+    year -= month <= 2;
+    long long era = (year >= 0 ? year : year - 399) / 400;
+    int year_of_era = year - (int) (era * 400);
+    int day_of_year = (153 * (month + (month > 2 ? -3 : 9)) + 2) / 5 + day - 1;
+    int day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    return era * 146097 + day_of_era - 719468;
+}
+
+int lta_minutes_until(const char *estimated_arrival, time_t now)
+{
+    int year, month, day, hour, minute, second;
+    char zone = 'Z';
+    int offset_hours = 0;
+    int offset_minutes = 0;
+
+    if (!estimated_arrival ||
+        sscanf(estimated_arrival, "%4d-%2d-%2dT%2d:%2d:%2d%c%2d:%2d", &year, &month, &day, &hour,
+               &minute, &second, &zone, &offset_hours, &offset_minutes) < 6) {
+        return -1;
+    }
+    if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 || second > 60) {
+        return -1;
+    }
+
+    long long offset = 0;
+    if (zone == '+' || zone == '-') {
+        offset = (zone == '-' ? -1 : 1) * (offset_hours * 3600LL + offset_minutes * 60LL);
+    }
+
+    long long arrival = days_from_civil(year, month, day) * 86400LL + hour * 3600LL +
+                        minute * 60LL + second - offset;
+    long long seconds = arrival - (long long) now;
+    return seconds <= 0 ? 0 : (int) (seconds / 60);
+}
+
+bool is_minute_in_window(int minute_of_day, int start_minutes, int end_minutes)
+{
+    if (start_minutes > end_minutes) {
+        // Window crosses midnight (e.g., 23:00 - 01:00)
+        return minute_of_day >= start_minutes || minute_of_day < end_minutes;
+    }
+    return minute_of_day >= start_minutes && minute_of_day < end_minutes;
+}
+
+bool is_bus_window_active(const struct tm *timeinfo, int start_minutes, int end_minutes,
+                          int lead_seconds)
+{
+    int now = timeinfo->tm_hour * 3600 + timeinfo->tm_min * 60 + timeinfo->tm_sec;
+    int soon = (now + lead_seconds) % 86400;
+    return is_minute_in_window(now / 60, start_minutes, end_minutes) ||
+           is_minute_in_window(soon / 60, start_minutes, end_minutes);
+}
+
+int calculate_bus_wakeup_interval(const struct tm *timeinfo, int next_rotation, int start_minutes,
+                                  int end_minutes, int refresh_seconds, int lead_seconds)
+{
+    int wake;
+
+    if (start_minutes == end_minutes) {
+        // Empty window: buses are never shown
+        wake = 86400;
+    } else if (is_bus_window_active(timeinfo, start_minutes, end_minutes, lead_seconds)) {
+        wake = refresh_seconds;
+    } else {
+        int now = timeinfo->tm_hour * 3600 + timeinfo->tm_min * 60 + timeinfo->tm_sec;
+        wake = start_minutes * 60 - now;
+        if (wake <= 0) {
+            wake += 86400;
+        }
+    }
+
+    return (next_rotation > 0 && next_rotation < wake) ? next_rotation : wake;
 }

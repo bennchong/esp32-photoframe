@@ -1,6 +1,5 @@
 #include "utils.h"
 
-#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -8,6 +7,7 @@
 #include <unistd.h>
 
 #include "board_hal.h"
+#include "bus_arrivals.h"
 #include "cJSON.h"
 #include "cert_pin.h"
 #include "color_palette.h"
@@ -33,118 +33,10 @@ static const char *TAG = "utils";
 #define LTA_BUS_ARRIVAL_URL \
     "https://datamall2.mytransport.sg/ltaodataservice/v3/BusArrival?BusStopCode=%s"
 #define LTA_BUS_ARRIVAL_TIMEOUT_MS 10000
-#define LTA_BUS_ARRIVAL_MAX_RESPONSE 16384
+#define LTA_BUS_ARRIVAL_MAX_RESPONSE 32768
 
 // Last image fetch error (transient, not persisted)
 static char last_fetch_error[256] = {0};
-
-static bool lta_service_is_requested(const char *service_no, const char *services_csv)
-{
-    if (!service_no || !service_no[0]) {
-        return false;
-    }
-
-    if (!services_csv || services_csv[0] == '\0') {
-        return true;
-    }
-
-    const char *cursor = services_csv;
-    while (*cursor != '\0') {
-        while (*cursor != '\0' && (isspace((unsigned char) *cursor) || *cursor == ',')) {
-            cursor++;
-        }
-        if (*cursor == '\0') {
-            break;
-        }
-
-        const char *start = cursor;
-        while (*cursor != '\0' && *cursor != ',') {
-            cursor++;
-        }
-
-        const char *end = cursor;
-        while (end > start && isspace((unsigned char) *(end - 1))) {
-            end--;
-        }
-
-        size_t len = (size_t) (end - start);
-        if (len > 0 && strlen(service_no) == len && strncmp(service_no, start, len) == 0) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-static void lta_add_estimated_arrival(cJSON *service, const char *key, cJSON *arrivals)
-{
-    if (!service || !key || !arrivals) {
-        return;
-    }
-
-    cJSON *bus = cJSON_GetObjectItem(service, key);
-    if (!bus || !cJSON_IsObject(bus)) {
-        return;
-    }
-
-    cJSON *arrival = cJSON_GetObjectItem(bus, "EstimatedArrival");
-    if (arrival && cJSON_IsString(arrival) && arrival->valuestring && arrival->valuestring[0]) {
-        cJSON_AddItemToArray(arrivals, cJSON_CreateString(arrival->valuestring));
-    }
-}
-
-static cJSON *lta_extract_arrival_timings(cJSON *json, const char *services_csv)
-{
-    if (!json) {
-        return NULL;
-    }
-
-    cJSON *result = cJSON_CreateObject();
-    if (!result) {
-        return NULL;
-    }
-
-    cJSON *services_out = cJSON_AddArrayToObject(result, "services");
-    if (!services_out) {
-        cJSON_Delete(result);
-        return NULL;
-    }
-
-    cJSON *services = cJSON_GetObjectItem(json, "Services");
-    if (!services || !cJSON_IsArray(services)) {
-        return result;
-    }
-
-    cJSON *service = NULL;
-    cJSON_ArrayForEach(service, services)
-    {
-        cJSON *service_no = cJSON_GetObjectItem(service, "ServiceNo");
-        if (!service_no || !cJSON_IsString(service_no) ||
-            !lta_service_is_requested(service_no->valuestring, services_csv)) {
-            continue;
-        }
-
-        cJSON *service_out = cJSON_CreateObject();
-        if (!service_out) {
-            continue;
-        }
-
-        cJSON_AddStringToObject(service_out, "service_no", service_no->valuestring);
-        cJSON *arrivals = cJSON_AddArrayToObject(service_out, "arrivals");
-        if (!arrivals) {
-            cJSON_Delete(service_out);
-            continue;
-        }
-
-        lta_add_estimated_arrival(service, "NextBus", arrivals);
-        lta_add_estimated_arrival(service, "NextBus2", arrivals);
-        lta_add_estimated_arrival(service, "NextBus3", arrivals);
-
-        cJSON_AddItemToArray(services_out, service_out);
-    }
-
-    return result;
-}
 
 void utils_set_last_fetch_error(const char *error)
 {
@@ -368,20 +260,26 @@ esp_err_t apply_config_from_json(cJSON *root)
         config_manager_set_save_downloaded_images(cJSON_IsTrue(item));
     }
 
-    // EInk Display - LTA Data Mall
+    // EInk Display - LTA Data Mall. Everything except the service lists can move the next
+    // wake-up, since bus arrivals refresh on their own schedule.
+    bool bus_schedule_changed = false;
+
     item = cJSON_GetObjectItem(root, "lta_account_key");
     if (item && cJSON_IsString(item)) {
         config_manager_set_lta_account_key(cJSON_GetStringValue(item));
+        bus_schedule_changed = true;
     }
 
     item = cJSON_GetObjectItem(root, "bus_enabled");
     if (item && cJSON_IsBool(item)) {
         config_manager_set_bus_enabled(cJSON_IsTrue(item));
+        bus_schedule_changed = true;
     }
 
     item = cJSON_GetObjectItem(root, "bus_stop_number");
     if (item && cJSON_IsString(item)) {
         config_manager_set_bus_stop_number(cJSON_GetStringValue(item));
+        bus_schedule_changed = true;
     }
 
     item = cJSON_GetObjectItem(root, "bus_services");
@@ -389,14 +287,31 @@ esp_err_t apply_config_from_json(cJSON *root)
         config_manager_set_bus_services(cJSON_GetStringValue(item));
     }
 
+    item = cJSON_GetObjectItem(root, "bus_stop_number_2");
+    if (item && cJSON_IsString(item)) {
+        config_manager_set_bus_stop_number_2(cJSON_GetStringValue(item));
+        bus_schedule_changed = true;
+    }
+
+    item = cJSON_GetObjectItem(root, "bus_services_2");
+    if (item && cJSON_IsString(item)) {
+        config_manager_set_bus_services_2(cJSON_GetStringValue(item));
+    }
+
     item = cJSON_GetObjectItem(root, "bus_time_start");
     if (item && cJSON_IsNumber(item)) {
         config_manager_set_bus_time_start(item->valueint);
+        bus_schedule_changed = true;
     }
 
     item = cJSON_GetObjectItem(root, "bus_time_end");
     if (item && cJSON_IsNumber(item)) {
         config_manager_set_bus_time_end(item->valueint);
+        bus_schedule_changed = true;
+    }
+
+    if (bus_schedule_changed) {
+        power_manager_reset_rotate_timer();
     }
 
     // AI API Keys
@@ -563,14 +478,6 @@ esp_err_t fetch_lta_bus_arrivals(const char *bus_stop_code, const char *account_
         goto cleanup;
     }
 
-    if (content_length <= 0) {
-        if (err_out && err_out_len > 0) {
-            snprintf(err_out, err_out_len, "Invalid response length");
-        }
-        err = ESP_FAIL;
-        goto cleanup;
-    }
-
     if (content_length > LTA_BUS_ARRIVAL_MAX_RESPONSE) {
         if (err_out && err_out_len > 0) {
             snprintf(err_out, err_out_len, "LTA response too large");
@@ -579,7 +486,7 @@ esp_err_t fetch_lta_bus_arrivals(const char *bus_stop_code, const char *account_
         goto cleanup;
     }
 
-    response_buffer = malloc((size_t) content_length + 1);
+    response_buffer = malloc(LTA_BUS_ARRIVAL_MAX_RESPONSE + 1);
     if (!response_buffer) {
         if (err_out && err_out_len > 0) {
             snprintf(err_out, err_out_len, "Failed to allocate response buffer");
@@ -588,12 +495,35 @@ esp_err_t fetch_lta_bus_arrivals(const char *bus_stop_code, const char *account_
         goto cleanup;
     }
 
-    int response_len = esp_http_client_read_response(client, response_buffer, content_length);
+    // Read until the stream ends: chunked replies carry no Content-Length
+    int response_len = 0;
+    while (response_len < LTA_BUS_ARRIVAL_MAX_RESPONSE) {
+        int read_len = esp_http_client_read(client, response_buffer + response_len,
+                                            LTA_BUS_ARRIVAL_MAX_RESPONSE - response_len);
+        if (read_len < 0) {
+            response_len = -1;
+            break;
+        }
+        if (read_len == 0) {
+            break;
+        }
+        response_len += read_len;
+    }
+
     if (response_len <= 0) {
         if (err_out && err_out_len > 0) {
             snprintf(err_out, err_out_len, "Failed to read LTA response");
         }
         err = ESP_FAIL;
+        goto cleanup;
+    }
+
+    if (response_len == LTA_BUS_ARRIVAL_MAX_RESPONSE &&
+        !esp_http_client_is_complete_data_received(client)) {
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "LTA response too large");
+        }
+        err = ESP_ERR_INVALID_SIZE;
         goto cleanup;
     }
 
@@ -608,18 +538,7 @@ esp_err_t fetch_lta_bus_arrivals(const char *bus_stop_code, const char *account_
         goto cleanup;
     }
 
-    cJSON *filtered = lta_extract_arrival_timings(json, config_manager_get_bus_services());
-    if (!filtered) {
-        if (err_out && err_out_len > 0) {
-            snprintf(err_out, err_out_len, "Failed to extract LTA arrival timings");
-        }
-        cJSON_Delete(json);
-        err = ESP_ERR_NO_MEM;
-        goto cleanup;
-    }
-
-    cJSON_Delete(json);
-    *response_out = filtered;
+    *response_out = json;
     err = ESP_OK;
 
 cleanup:
@@ -1234,6 +1153,11 @@ esp_err_t fetch_and_save_image_from_url(const char *url, char *saved_image_path,
 
 esp_err_t trigger_image_rotation(void)
 {
+    // Bus arrivals take the place of photos while their time window is active
+    if (bus_arrivals_is_active() && bus_arrivals_show() == ESP_OK) {
+        return ESP_OK;
+    }
+
     rotation_mode_t rotation_mode = config_manager_get_rotation_mode();
     esp_err_t result = ESP_OK;
 
@@ -1316,7 +1240,19 @@ int get_seconds_until_next_wakeup(void)
         .end_minutes = config_manager_get_sleep_schedule_end(),
     };
 
-    return calculate_next_wakeup_interval(&timeinfo, rotate_interval, aligned, &sleep_schedule);
+    int seconds =
+        calculate_next_wakeup_interval(&timeinfo, rotate_interval, aligned, &sleep_schedule);
+
+    // Refresh bus arrivals often inside their window and wake when it opens. The sleep schedule
+    // still wins: while it's on, keep the wake-up at its end.
+    if (bus_arrivals_is_enabled() && !config_manager_is_in_sleep_schedule()) {
+        seconds = calculate_bus_wakeup_interval(
+            &timeinfo, config_manager_get_auto_rotate() ? seconds : 0,
+            config_manager_get_bus_time_start(), config_manager_get_bus_time_end(),
+            BUS_REFRESH_INTERVAL_SEC, BUS_WINDOW_LEAD_SEC);
+    }
+
+    return seconds;
 }
 
 void sanitize_hostname(const char *device_name, char *hostname, size_t max_len)

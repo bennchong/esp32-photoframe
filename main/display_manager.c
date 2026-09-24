@@ -268,9 +268,9 @@ static void bus_draw_stop_panel(uint16_t x, uint16_t y, uint16_t width, uint16_t
     if (service_count > DISPLAY_MANAGER_BUS_MAX_SERVICES) {
         service_count = DISPLAY_MANAGER_BUS_MAX_SERVICES;
     }
-    if (service_count == 0) {
-        bus_draw_text_centered(x, rows_y, width, y + height - rows_y, "No services",
-                               EPD_7IN3E_BLACK, 1);
+    if ((stop->message && stop->message[0]) || service_count == 0) {
+        const char *message = (stop->message && stop->message[0]) ? stop->message : "No services";
+        bus_draw_text_centered(x, rows_y, width, y + height - rows_y, message, EPD_7IN3E_BLACK, 1);
         return;
     }
 

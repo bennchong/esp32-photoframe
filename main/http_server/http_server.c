@@ -1650,6 +1650,11 @@ static esp_err_t config_handler(httpd_req_t *req)
         cJSON_AddStringToObject(root, "bus_stop_number", bus_stop_number ? bus_stop_number : "");
         const char *bus_services = config_manager_get_bus_services();
         cJSON_AddStringToObject(root, "bus_services", bus_services ? bus_services : "");
+        const char *bus_stop_number_2 = config_manager_get_bus_stop_number_2();
+        cJSON_AddStringToObject(root, "bus_stop_number_2",
+                                bus_stop_number_2 ? bus_stop_number_2 : "");
+        const char *bus_services_2 = config_manager_get_bus_services_2();
+        cJSON_AddStringToObject(root, "bus_services_2", bus_services_2 ? bus_services_2 : "");
         cJSON_AddNumberToObject(root, "bus_time_start", config_manager_get_bus_time_start());
         cJSON_AddNumberToObject(root, "bus_time_end", config_manager_get_bus_time_end());
 

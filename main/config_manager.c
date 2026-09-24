@@ -50,6 +50,8 @@ static char lta_account_key[LTA_ACCOUNT_KEY_MAX_LEN] = {0};
 static bool bus_enabled = false;
 static char bus_stop_number[BUS_STOP_NUMBER_MAX_LEN] = {0};
 static char bus_services[BUS_SERVICES_MAX_LEN] = {0};
+static char bus_stop_number_2[BUS_STOP_NUMBER_MAX_LEN] = {0};
+static char bus_services_2[BUS_SERVICES_MAX_LEN] = {0};
 static int bus_time_start = 0;
 static int bus_time_end = 1439;
 
@@ -276,6 +278,18 @@ esp_err_t config_manager_init(void)
         if (nvs_get_str(nvs_handle, NVS_BUS_SERVICES_KEY, bus_services, &bus_services_len) ==
             ESP_OK) {
             ESP_LOGI(TAG, "Loaded bus services from NVS: %s", bus_services);
+        }
+
+        size_t bus_stop_2_len = BUS_STOP_NUMBER_MAX_LEN;
+        if (nvs_get_str(nvs_handle, NVS_BUS_STOP_NUMBER_2_KEY, bus_stop_number_2,
+                        &bus_stop_2_len) == ESP_OK) {
+            ESP_LOGI(TAG, "Loaded bus stop 2 number from NVS: %s", bus_stop_number_2);
+        }
+
+        size_t bus_services_2_len = BUS_SERVICES_MAX_LEN;
+        if (nvs_get_str(nvs_handle, NVS_BUS_SERVICES_2_KEY, bus_services_2, &bus_services_2_len) ==
+            ESP_OK) {
+            ESP_LOGI(TAG, "Loaded bus stop 2 services from NVS: %s", bus_services_2);
         }
 
         int32_t stored_bus_time_start = 0;
@@ -1003,6 +1017,54 @@ void config_manager_set_bus_services(const char *services)
 const char *config_manager_get_bus_services(void)
 {
     return bus_services;
+}
+
+void config_manager_set_bus_stop_number_2(const char *number)
+{
+    if (number == NULL) {
+        return;
+    }
+
+    strncpy(bus_stop_number_2, number, BUS_STOP_NUMBER_MAX_LEN - 1);
+    bus_stop_number_2[BUS_STOP_NUMBER_MAX_LEN - 1] = '\0';
+
+    nvs_handle_t nvs_handle;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle) == ESP_OK) {
+        nvs_set_str(nvs_handle, NVS_BUS_STOP_NUMBER_2_KEY, bus_stop_number_2);
+        nvs_commit(nvs_handle);
+        nvs_close(nvs_handle);
+    }
+
+    ESP_LOGI(TAG, "Bus stop 2 number set to: %s", bus_stop_number_2);
+}
+
+const char *config_manager_get_bus_stop_number_2(void)
+{
+    return bus_stop_number_2;
+}
+
+void config_manager_set_bus_services_2(const char *services)
+{
+    if (services == NULL) {
+        return;
+    }
+
+    strncpy(bus_services_2, services, BUS_SERVICES_MAX_LEN - 1);
+    bus_services_2[BUS_SERVICES_MAX_LEN - 1] = '\0';
+
+    nvs_handle_t nvs_handle;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle) == ESP_OK) {
+        nvs_set_str(nvs_handle, NVS_BUS_SERVICES_2_KEY, bus_services_2);
+        nvs_commit(nvs_handle);
+        nvs_close(nvs_handle);
+    }
+
+    ESP_LOGI(TAG, "Bus stop 2 services set to: %s", bus_services_2);
+}
+
+const char *config_manager_get_bus_services_2(void)
+{
+    return bus_services_2;
 }
 
 void config_manager_set_bus_time_start(int minutes)

@@ -63,6 +63,11 @@ typedef enum {
 
 #define IMAGE_ROTATE_INTERVAL_SEC 3600
 
+// Bus arrivals refresh this often while their time window is active. A wake-up up to
+// BUS_WINDOW_LEAD_SEC before the window opens counts as inside it, which absorbs RTC drift.
+#define BUS_REFRESH_INTERVAL_SEC 120
+#define BUS_WINDOW_LEAD_SEC 60
+
 // WiFi
 #define NVS_WIFI_SSID_KEY "wifi_ssid"
 #define NVS_WIFI_PASS_KEY "wifi_pass"
@@ -104,6 +109,8 @@ typedef enum {
 #define NVS_BUS_ENABLED_KEY "bus_en"
 #define NVS_BUS_STOP_NUMBER_KEY "bus_stop"
 #define NVS_BUS_SERVICES_KEY "bus_svcs"
+#define NVS_BUS_STOP_NUMBER_2_KEY "bus_stop2"
+#define NVS_BUS_SERVICES_2_KEY "bus_svcs2"
 #define NVS_BUS_TIME_START_KEY "bus_time_s"
 #define NVS_BUS_TIME_END_KEY "bus_time_e"
 

@@ -49,6 +49,8 @@ export const useSettingsStore = defineStore("settings", () => {
     busEnabled: false,
     busStopNumber: "",
     busServices: "",
+    busStopNumber2: "",
+    busServices2: "",
     busTimeStart: "00:00",
     busTimeEnd: "23:59",
     // Home Assistant
@@ -208,6 +210,8 @@ export const useSettingsStore = defineStore("settings", () => {
       deviceSettings.value.busEnabled = data.bus_enabled ?? false;
       deviceSettings.value.busStopNumber = data.bus_stop_number || "";
       deviceSettings.value.busServices = data.bus_services || "";
+      deviceSettings.value.busStopNumber2 = data.bus_stop_number_2 || "";
+      deviceSettings.value.busServices2 = data.bus_services_2 || "";
 
       const busTimeStartMinutes = data.bus_time_start ?? 0;
       const busTimeStartHours = Math.floor(busTimeStartMinutes / 60);
@@ -292,8 +296,10 @@ export const useSettingsStore = defineStore("settings", () => {
       http_header_value: deviceSettings.value.httpHeaderValue,
       lta_account_key: deviceSettings.value.ltaAccountKey,
       bus_enabled: deviceSettings.value.busEnabled,
-      bus_stop_number: deviceSettings.value.busStopNumber,
+      bus_stop_number: deviceSettings.value.busStopNumber.trim(),
       bus_services: deviceSettings.value.busServices,
+      bus_stop_number_2: deviceSettings.value.busStopNumber2.trim(),
+      bus_services_2: deviceSettings.value.busServices2,
       bus_time_start: busTimeStart,
       bus_time_end: busTimeEnd,
       wifi_ssid: deviceSettings.value.wifiSsid,

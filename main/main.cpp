@@ -23,6 +23,7 @@
 extern "C" {
 #include "album_manager.h"
 #include "board_hal.h"
+#include "bus_arrivals.h"
 #include "color_palette.h"
 #include "config.h"
 #include "config_manager.h"
@@ -258,12 +259,12 @@ void deep_sleep_wake_main(wakeup_source_t wakeup_src)
 {
     bool is_button_wake = (wakeup_src == WAKEUP_SOURCE_ROTATE_BUTTON);
     rotation_mode_t rotation_mode = config_manager_get_rotation_mode();
-    bool wifi_required = (rotation_mode == ROTATION_MODE_URL);
+    // URL mode and bus arrivals both fetch over WiFi
+    bool wifi_required = (rotation_mode == ROTATION_MODE_URL) || bus_arrivals_is_active();
     bool wifi_connected = false;
 
-    // Initialize WiFi if needed (URL mode always needs it)
     if (wifi_required) {
-        ESP_LOGI(TAG, "Initializing WiFi for URL rotation");
+        ESP_LOGI(TAG, "Initializing WiFi");
         ESP_ERROR_CHECK(wifi_manager_init());
 
         if (connect_to_wifi_with_timeout(60)) {

@@ -164,6 +164,27 @@ const ltaTestMessage = ref("");
 // resolve "near me" itself.
 const busStopMapUrl = "https://www.google.com/maps/search/?api=1&query=bus+stops+near+me";
 
+const busStopFields = [
+  {
+    number: "busStopNumber",
+    services: "busServices",
+    numberLabel: "Stop 1 number",
+    servicesLabel: "Stop 1 services",
+  },
+  {
+    number: "busStopNumber2",
+    services: "busServices2",
+    numberLabel: "Stop 2 number (optional)",
+    servicesLabel: "Stop 2 services",
+  },
+];
+
+const busStopNumberRule = (value) =>
+  !value?.trim() || /^\d{5}$/.test(value.trim()) || "Enter the 5-digit stop number";
+const busServicesRule = (value) =>
+  (value || "").split(",").filter((service) => service.trim()).length <= 5 ||
+  "Up to 5 services per stop";
+
 async function testLtaAccountKey() {
   ltaTesting.value = true;
   ltaTestStatus.value = "";
@@ -743,15 +764,36 @@ async function performFactoryReset() {
                 >
                   {{ ltaTestMessage }}
                 </v-alert>
-                <v-text-field
-                  v-model="settingsStore.deviceSettings.busStopNumber"
-                  label="Bus Stop Number"
-                  variant="outlined"
-                  hint="5-digit stop code (e.g., 83139)"
-                  persistent-hint
-                  class="mb-2"
-                  :disabled="!settingsStore.deviceSettings.busEnabled"
-                />
+                <div class="text-subtitle-2 mb-3">Bus stops</div>
+                <v-row v-for="stop in busStopFields" :key="stop.number" dense>
+                  <v-col cols="12" sm="4">
+                    <v-text-field
+                      v-model="settingsStore.deviceSettings[stop.number]"
+                      :label="stop.numberLabel"
+                      placeholder="e.g. 83139"
+                      inputmode="numeric"
+                      variant="outlined"
+                      hide-details="auto"
+                      :rules="[busStopNumberRule]"
+                      :disabled="!settingsStore.deviceSettings.busEnabled"
+                    />
+                  </v-col>
+                  <v-col cols="12" sm="8">
+                    <v-text-field
+                      v-model="settingsStore.deviceSettings[stop.services]"
+                      :label="stop.servicesLabel"
+                      placeholder="e.g. 12, 36, 851"
+                      variant="outlined"
+                      hide-details="auto"
+                      :rules="[busServicesRule]"
+                      :disabled="!settingsStore.deviceSettings.busEnabled"
+                    />
+                  </v-col>
+                </v-row>
+                <div class="text-caption text-medium-emphasis mt-2 mb-3">
+                  List up to 5 services per stop, separated by commas. Leave a list empty to show
+                  the first 5 services at that stop.
+                </div>
                 <div class="d-flex flex-wrap align-center ga-2 mb-4">
                   <!-- href only while enabled: a disabled <a> would still be keyboard-activatable -->
                   <v-btn
@@ -768,15 +810,6 @@ async function performFactoryReset() {
                     Use Google Maps to locate a nearby bus stop, then enter its stop number above.
                   </span>
                 </div>
-                <v-text-field
-                  v-model="settingsStore.deviceSettings.busServices"
-                  label="Bus Services"
-                  variant="outlined"
-                  hint="Comma-separated list (e.g., 12, 36, 851)"
-                  persistent-hint
-                  class="mb-4"
-                  :disabled="!settingsStore.deviceSettings.busEnabled"
-                />
                 <v-row>
                   <v-col cols="12" sm="6" md="3">
                     <v-text-field
@@ -800,7 +833,8 @@ async function performFactoryReset() {
                   </v-col>
                 </v-row>
                 <v-alert type="info" variant="tonal" density="compact" class="mt-4">
-                  Bus timings are shown only during this time range.
+                  The frame shows bus arrivals instead of photos during this time range, refreshing
+                  every 2 minutes. On battery, keep the range short.
                 </v-alert>
               </v-card-text>
             </v-card>

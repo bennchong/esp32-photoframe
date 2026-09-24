@@ -51,6 +51,7 @@ typedef struct {
     const char *stop_id;
     const display_manager_bus_service_t *services;
     size_t service_count;
+    const char *message;  // Shown in place of the service rows when set, e.g. a fetch error
 } display_manager_bus_stop_t;
 
 typedef struct {

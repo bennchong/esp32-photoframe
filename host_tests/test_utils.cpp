@@ -265,3 +265,168 @@ int main(int argc, char **argv)
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }
+
+// ============================================================================
+// Bus arrivals
+// ============================================================================
+
+TEST(ParseBusServiceListTest, TrimsAndSkipsEmptyEntries)
+{
+    char services[5][BUS_SERVICE_NO_LEN];
+    ASSERT_EQ(3, parse_bus_service_list(" 12, 36 ,,851 ", services, 5));
+    EXPECT_STREQ("12", services[0]);
+    EXPECT_STREQ("36", services[1]);
+    EXPECT_STREQ("851", services[2]);
+}
+
+TEST(ParseBusServiceListTest, StopsAtMax)
+{
+    char services[5][BUS_SERVICE_NO_LEN];
+    ASSERT_EQ(5, parse_bus_service_list("1,2,3,4,5,6,7", services, 5));
+    EXPECT_STREQ("5", services[4]);
+}
+
+TEST(ParseBusServiceListTest, EmptyInput)
+{
+    char services[5][BUS_SERVICE_NO_LEN];
+    EXPECT_EQ(0, parse_bus_service_list("", services, 5));
+    EXPECT_EQ(0, parse_bus_service_list(NULL, services, 5));
+    EXPECT_EQ(0, parse_bus_service_list(" , ,", services, 5));
+}
+
+TEST(ParseBusServiceListTest, SkipsOverlongEntries)
+{
+    char services[5][BUS_SERVICE_NO_LEN];
+    ASSERT_EQ(1, parse_bus_service_list("NOTASERVICE, 15", services, 5));
+    EXPECT_STREQ("15", services[0]);
+}
+
+static time_t Utc(int year, int month, int day, int hour, int minute, int second)
+{
+    struct tm t;
+    memset(&t, 0, sizeof(t));
+    t.tm_year = year - 1900;
+    t.tm_mon = month - 1;
+    t.tm_mday = day;
+    t.tm_hour = hour;
+    t.tm_min = minute;
+    t.tm_sec = second;
+    return timegm(&t);
+}
+
+TEST(LtaMinutesUntilTest, RoundsDown)
+{
+    time_t now = Utc(2026, 9, 23, 23, 40, 0);  // 07:40:00 in Singapore (UTC+8)
+    EXPECT_EQ(5, lta_minutes_until("2026-09-24T07:45:59+08:00", now));
+    EXPECT_EQ(1, lta_minutes_until("2026-09-24T07:41:00+08:00", now));
+}
+
+TEST(LtaMinutesUntilTest, DueOrPastIsZero)
+{
+    time_t now = Utc(2026, 9, 23, 23, 40, 0);
+    EXPECT_EQ(0, lta_minutes_until("2026-09-24T07:40:59+08:00", now));
+    EXPECT_EQ(0, lta_minutes_until("2026-09-24T07:38:00+08:00", now));
+}
+
+TEST(LtaMinutesUntilTest, HonoursOffsets)
+{
+    time_t now = Utc(2026, 9, 23, 23, 40, 0);
+    EXPECT_EQ(10, lta_minutes_until("2026-09-23T23:50:00Z", now));
+    EXPECT_EQ(10, lta_minutes_until("2026-09-23T18:50:00-05:00", now));
+}
+
+TEST(LtaMinutesUntilTest, CrossesMidnightAndMonthEnd)
+{
+    time_t now = Utc(2026, 9, 30, 15, 55, 0);  // 23:55 on 30 Sep in Singapore
+    EXPECT_EQ(10, lta_minutes_until("2026-10-01T00:05:00+08:00", now));
+}
+
+TEST(LtaMinutesUntilTest, EmptyOrMalformed)
+{
+    time_t now = Utc(2026, 9, 23, 23, 40, 0);
+    EXPECT_EQ(-1, lta_minutes_until("", now));
+    EXPECT_EQ(-1, lta_minutes_until(NULL, now));
+    EXPECT_EQ(-1, lta_minutes_until("soon", now));
+    EXPECT_EQ(-1, lta_minutes_until("2026-13-01T00:00:00+08:00", now));
+}
+
+TEST(BusWindowTest, SameDayAndOvernight)
+{
+    EXPECT_TRUE(is_minute_in_window(390, 390, 570));
+    EXPECT_FALSE(is_minute_in_window(570, 390, 570));
+    EXPECT_TRUE(is_minute_in_window(1400, 1380, 60));
+    EXPECT_TRUE(is_minute_in_window(30, 1380, 60));
+    EXPECT_FALSE(is_minute_in_window(60, 1380, 60));
+    EXPECT_FALSE(is_minute_in_window(500, 500, 500));
+}
+
+class BusWakeupTest : public ::testing::Test
+{
+   protected:
+    struct tm At(int hour, int minute, int second)
+    {
+        struct tm t;
+        memset(&t, 0, sizeof(t));
+        t.tm_year = 126;
+        t.tm_mon = 8;
+        t.tm_mday = 24;
+        t.tm_hour = hour;
+        t.tm_min = minute;
+        t.tm_sec = second;
+        return t;
+    }
+
+    // Window 06:30 - 09:30, refresh every 2 minutes, 60s lead
+    int Wakeup(const struct tm &t, int next_rotation)
+    {
+        return calculate_bus_wakeup_interval(&t, next_rotation, 390, 570, 120, 60);
+    }
+};
+
+TEST_F(BusWakeupTest, RefreshesInsideWindow)
+{
+    EXPECT_EQ(120, Wakeup(At(7, 0, 0), 3600));
+}
+
+TEST_F(BusWakeupTest, SoonerPhotoRotationWins)
+{
+    EXPECT_EQ(60, Wakeup(At(7, 0, 0), 60));
+}
+
+TEST_F(BusWakeupTest, WakesWhenWindowOpens)
+{
+    EXPECT_EQ(1200, Wakeup(At(6, 10, 0), 3000)) << "06:10 -> 06:30, before the 07:00 rotation";
+}
+
+TEST_F(BusWakeupTest, PhotoRotationBeforeWindow)
+{
+    EXPECT_EQ(1800, Wakeup(At(5, 0, 0), 1800));
+}
+
+TEST_F(BusWakeupTest, WindowOpensTomorrowWithRotationOff)
+{
+    EXPECT_EQ(73800, Wakeup(At(10, 0, 0), 0)) << "10:00 -> 06:30 next day";
+}
+
+TEST_F(BusWakeupTest, LeadAbsorbsEarlyWake)
+{
+    EXPECT_EQ(120, Wakeup(At(6, 29, 20), 0)) << "Woke 40s early for the 06:30 window";
+}
+
+TEST_F(BusWakeupTest, WindowClosedAfterEnd)
+{
+    EXPECT_EQ(75540, Wakeup(At(9, 31, 0), 0)) << "09:31 -> 06:30 next day";
+}
+
+TEST_F(BusWakeupTest, OvernightWindow)
+{
+    struct tm t = At(0, 30, 0);
+    EXPECT_EQ(120, calculate_bus_wakeup_interval(&t, 0, 1380, 60, 120, 60));
+}
+
+TEST_F(BusWakeupTest, EmptyWindowNeverShowsBuses)
+{
+    struct tm t = At(7, 0, 0);
+    EXPECT_EQ(3600, calculate_bus_wakeup_interval(&t, 3600, 420, 420, 120, 60));
+    EXPECT_EQ(86400, calculate_bus_wakeup_interval(&t, 0, 420, 420, 120, 60));
+}
