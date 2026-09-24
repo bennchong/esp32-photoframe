@@ -4,8 +4,9 @@
 
 #include <string>
 
-class String {
-  public:
+class String
+{
+   public:
     String() = default;
     String(const char *value) : value_(value ? value : "") {}
     String(const std::string &value) : value_(value) {}
@@ -60,7 +61,7 @@ class String {
         return *this;
     }
 
-  private:
+   private:
     std::string value_;
 };
 

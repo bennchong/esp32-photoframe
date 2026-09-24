@@ -256,16 +256,14 @@ esp_err_t config_manager_init(void)
 
         // EInk Display - LTA Data Mall
         size_t lta_key_len = LTA_ACCOUNT_KEY_MAX_LEN;
-        if (nvs_get_str(nvs_handle, NVS_LTA_ACCOUNT_KEY, lta_account_key, &lta_key_len) ==
-            ESP_OK) {
+        if (nvs_get_str(nvs_handle, NVS_LTA_ACCOUNT_KEY, lta_account_key, &lta_key_len) == ESP_OK) {
             ESP_LOGI(TAG, "Loaded LTA AccountKey from NVS");
         }
 
         uint8_t stored_bus_enabled = 0;
         if (nvs_get_u8(nvs_handle, NVS_BUS_ENABLED_KEY, &stored_bus_enabled) == ESP_OK) {
             bus_enabled = (stored_bus_enabled != 0);
-            ESP_LOGI(TAG, "Loaded bus feature enabled from NVS: %s",
-                     bus_enabled ? "yes" : "no");
+            ESP_LOGI(TAG, "Loaded bus feature enabled from NVS: %s", bus_enabled ? "yes" : "no");
         }
 
         size_t bus_stop_len = BUS_STOP_NUMBER_MAX_LEN;
@@ -283,8 +281,8 @@ esp_err_t config_manager_init(void)
         int32_t stored_bus_time_start = 0;
         if (nvs_get_i32(nvs_handle, NVS_BUS_TIME_START_KEY, &stored_bus_time_start) == ESP_OK) {
             bus_time_start = stored_bus_time_start;
-            ESP_LOGI(TAG, "Loaded bus time start from NVS: %d minutes (%02d:%02d)",
-                     bus_time_start, bus_time_start / 60, bus_time_start % 60);
+            ESP_LOGI(TAG, "Loaded bus time start from NVS: %d minutes (%02d:%02d)", bus_time_start,
+                     bus_time_start / 60, bus_time_start % 60);
         }
 
         int32_t stored_bus_time_end = 1439;

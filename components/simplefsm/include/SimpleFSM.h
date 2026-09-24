@@ -21,12 +21,7 @@ typedef bool (*GuardCondition)();
 /////////////////////////////////////////////////////////////////
 
 // Error codes for better error handling
-enum class FSMError {
-  OK,
-  OUT_OF_MEMORY,
-  INVALID_PARAMETER,
-  ARRAY_TOO_LARGE
-};
+enum class FSMError { OK, OUT_OF_MEMORY, INVALID_PARAMETER, ARRAY_TOO_LARGE };
 
 /////////////////////////////////////////////////////////////////
 
@@ -35,9 +30,9 @@ class FSMTestHelper;
 
 /////////////////////////////////////////////////////////////////
 
-
-class SimpleFSM {
-  public:
+class SimpleFSM
+{
+   public:
     SimpleFSM();
     SimpleFSM(State* initial_state);
     ~SimpleFSM();
@@ -63,7 +58,7 @@ class SimpleFSM {
     int getTransitionCount() const;
     int getTimedTransitionCount() const;
     int getStateCount() const;
-    
+
     bool isFinished() const;
     State* getState() const;
     bool isInState(State* state) const;
@@ -77,19 +72,19 @@ class SimpleFSM {
     bool hasError() const;
     const char* getErrorString(FSMError error) const;
 
- protected:
+   protected:
     // Safety limits to prevent excessive memory allocation
     static constexpr int MAX_TRANSITIONS = 100;
     static constexpr int MAX_TIMED_TRANSITIONS = 50;
     static constexpr int MAX_STATES = 50;
-    
+
     // Default timing constants
     static constexpr int DEFAULT_RUN_INTERVAL_MS = 1000;
-    
+
     // DOT graph formatting constants
     static constexpr const char* DOT_NODE_WIDTH = "1.5";
     static constexpr const char* DOT_PAD_VALUE = "0.5";
-    
+
     // Reset/initialization values
     static constexpr unsigned long TIMESTAMP_RESET_VALUE = 0;
     static constexpr int INITIAL_ID_VALUE = 0;
@@ -123,8 +118,10 @@ class SimpleFSM {
 
     FSMError addUniqueState(State* state);
 
-    bool isDuplicate(const TimedTransition& transition, const TimedTransition* transitionArray, int arraySize) const;
-    bool isDuplicate(const Transition& transition, const Transition* transitionArray, int arraySize) const;
+    bool isDuplicate(const TimedTransition& transition, const TimedTransition* transitionArray,
+                     int arraySize) const;
+    bool isDuplicate(const Transition& transition, const Transition* transitionArray,
+                     int arraySize) const;
 
     bool isTimeForRun(unsigned long now, int interval);
     void handleTimedEvents(unsigned long now);
@@ -143,8 +140,6 @@ class SimpleFSM {
     String getDOTTransition(String from, String to, String label, String param);
     String getDOTInitialState();
     String getDOTActiveNode();
-
-
 };
 
 /////////////////////////////////////////////////////////////////

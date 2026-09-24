@@ -44,10 +44,7 @@
 
 static const char *TAG = "main";
 
-enum AppEvent
-{
-    APP_EVENT_NEXT = 1
-};
+enum AppEvent { APP_EVENT_NEXT = 1 };
 
 static void app_state_init_enter(void);
 static void app_state_wakeup_enter(void);
@@ -75,12 +72,8 @@ static Transition app_transitions[] = {
 
 static void app_fsm_setup(void)
 {
-    State *states[] = {&app_state_init,
-                       &app_state_wakeup,
-                       &app_state_wifi_setup,
-                       &app_state_wifi_connect,
-                       &app_state_services,
-                       &app_state_running};
+    State *states[] = {&app_state_init,         &app_state_wakeup,   &app_state_wifi_setup,
+                       &app_state_wifi_connect, &app_state_services, &app_state_running};
 
     FSMError err = app_fsm.add(states, sizeof(states) / sizeof(states[0]));
     if (err != FSMError::OK) {
