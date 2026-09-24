@@ -37,7 +37,7 @@ esp_err_t display_manager_show_rgb_buffer(const uint8_t *rgb_buffer, int width, 
 // ============================================================================
 
 #define DISPLAY_MANAGER_BUS_MAX_STOPS 2
-#define DISPLAY_MANAGER_BUS_MAX_SERVICES 3
+#define DISPLAY_MANAGER_BUS_MAX_SERVICES 5
 #define DISPLAY_MANAGER_BUS_MAX_ARRIVALS 2
 
 typedef struct {
@@ -62,6 +62,10 @@ typedef struct {
 
 /**
  * @brief Display a bus arrival timing screen rendered from structured data.
+ *
+ * Up to two stops are shown side by side in landscape and stacked in portrait, each with up to
+ * DISPLAY_MANAGER_BUS_MAX_SERVICES rows of service number and next arrivals. Arrivals are "ARR"
+ * or whole minutes: "ARR"/0 is drawn red, 1-5 min green and later arrivals yellow.
  *
  * @param screen Screen layout + timing data to render
  * @return esp_err_t ESP_OK on success
