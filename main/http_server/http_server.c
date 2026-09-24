@@ -1809,7 +1809,7 @@ static esp_err_t lta_test_handler(httpd_req_t *req)
 
     if (account_key[0] == '\0') {
         snprintf(message, sizeof(message), "LTA AccountKey is required");
-        httpd_resp_set_status(req, HTTPD_400_BAD_REQUEST);
+        httpd_resp_set_status(req, HTTPD_400);
     } else {
         esp_http_client_config_t config = {
             .url = LTA_TEST_URL,

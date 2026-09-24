@@ -6,12 +6,6 @@
 #include <unistd.h>
 
 #include "SimpleFSM.h"
-#include "album_manager.h"
-#include "board_hal.h"
-#include "color_palette.h"
-#include "config.h"
-#include "config_manager.h"
-#include "display_manager.h"
 #include "driver/gpio.h"
 #include "esp_heap_caps.h"
 #include "esp_littlefs.h"
@@ -21,6 +15,18 @@
 #include "esp_vfs_dev.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "nvs_flash.h"
+
+// Most of the project's C headers have no extern "C" guard (and epaper.h, via board_hal.h,
+// declares some functions both outside and inside one), so give them C linkage here. ESP-IDF
+// headers stay above: some define C++ operator overloads, which can't have C linkage.
+extern "C" {
+#include "album_manager.h"
+#include "board_hal.h"
+#include "color_palette.h"
+#include "config.h"
+#include "config_manager.h"
+#include "display_manager.h"
 
 // External RTC support
 #ifdef CONFIG_EXT_RTC_ENABLED
@@ -31,7 +37,6 @@
 #include "image_processor.h"
 #include "mdns_service.h"
 #include "memfs.h"
-#include "nvs_flash.h"
 #include "ota_manager.h"
 #include "periodic_tasks.h"
 #include "power_manager.h"
@@ -41,6 +46,7 @@
 #include "utils.h"
 #include "wifi_manager.h"
 #include "wifi_provisioning.h"
+}
 
 static const char *TAG = "main";
 
