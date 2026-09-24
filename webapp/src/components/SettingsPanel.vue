@@ -159,8 +159,10 @@ const importFileName = ref("");
 const ltaTesting = ref(false);
 const ltaTestStatus = ref("");
 const ltaTestMessage = ref("");
-const ltaMapLoading = ref(false);
-const ltaMapError = ref("");
+
+// Browsers block the Geolocation API on the device's plain-HTTP origin, so let Google Maps
+// resolve "near me" itself.
+const busStopMapUrl = "https://www.google.com/maps/search/?api=1&query=bus+stops+near+me";
 
 async function testLtaAccountKey() {
   ltaTesting.value = true;
@@ -191,43 +193,6 @@ async function testLtaAccountKey() {
   } finally {
     ltaTesting.value = false;
   }
-}
-
-function openBusStopMap() {
-  ltaMapError.value = "";
-
-  const openMap = (url) => {
-    const newWindow = window.open(url, "_blank", "noopener,noreferrer");
-    if (newWindow) {
-      newWindow.opener = null;
-    }
-  };
-
-  if (!navigator.geolocation) {
-    ltaMapError.value = "Geolocation is not available in this browser.";
-    openMap("https://www.google.com/maps/search/bus+stop");
-    return;
-  }
-
-  ltaMapLoading.value = true;
-  navigator.geolocation.getCurrentPosition(
-    (position) => {
-      const { latitude, longitude } = position.coords;
-      const url = `https://www.google.com/maps/search/bus+stop/@${latitude},${longitude},16z`;
-      openMap(url);
-      ltaMapLoading.value = false;
-    },
-    (error) => {
-      ltaMapError.value = error.message || "Unable to fetch your location.";
-      openMap("https://www.google.com/maps/search/bus+stop");
-      ltaMapLoading.value = false;
-    },
-    {
-      enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 60000,
-    }
-  );
 }
 
 async function exportConfig() {
@@ -747,6 +712,7 @@ async function performFactoryReset() {
                   label="Enable Bus Arrivals"
                   color="primary"
                   class="mb-4"
+                  hide-details
                 />
                 <v-text-field
                   v-model="settingsStore.deviceSettings.ltaAccountKey"
@@ -758,30 +724,16 @@ async function performFactoryReset() {
                   class="mb-4"
                   :disabled="!settingsStore.deviceSettings.busEnabled"
                 />
-                <v-row class="mb-4">
-                  <v-col cols="12" md="4">
-                    <v-btn
-                      variant="outlined"
-                      :loading="ltaTesting"
-                      :disabled="!settingsStore.deviceSettings.busEnabled"
-                      @click="testLtaAccountKey"
-                    >
-                      <v-icon start>mdi-shield-check</v-icon>
-                      Test AccountKey
-                    </v-btn>
-                  </v-col>
-                  <v-col cols="12" md="8">
-                    <v-btn
-                      variant="outlined"
-                      :loading="ltaMapLoading"
-                      :disabled="!settingsStore.deviceSettings.busEnabled"
-                      @click="openBusStopMap"
-                    >
-                      <v-icon start>mdi-map-marker</v-icon>
-                      Find nearby bus stops in Google Maps
-                    </v-btn>
-                  </v-col>
-                </v-row>
+                <v-btn
+                  variant="outlined"
+                  class="mb-4"
+                  :loading="ltaTesting"
+                  :disabled="!settingsStore.deviceSettings.busEnabled"
+                  @click="testLtaAccountKey"
+                >
+                  <v-icon start>mdi-shield-check</v-icon>
+                  Test AccountKey
+                </v-btn>
                 <v-alert
                   v-if="ltaTestMessage"
                   :type="ltaTestStatus === 'success' ? 'success' : 'error'"
@@ -791,25 +743,31 @@ async function performFactoryReset() {
                 >
                   {{ ltaTestMessage }}
                 </v-alert>
-                <v-alert
-                  v-if="ltaMapError"
-                  type="warning"
-                  variant="tonal"
-                  density="compact"
-                  class="mb-4"
-                >
-                  {{ ltaMapError }}
-                </v-alert>
                 <v-text-field
                   v-model="settingsStore.deviceSettings.busStopNumber"
                   label="Bus Stop Number"
                   variant="outlined"
-                  class="mb-4"
+                  hint="5-digit stop code (e.g., 83139)"
+                  persistent-hint
+                  class="mb-2"
                   :disabled="!settingsStore.deviceSettings.busEnabled"
                 />
-                <v-alert type="info" variant="tonal" density="compact" class="mb-4">
-                  Use Google Maps to locate a nearby bus stop and enter its stop number here.
-                </v-alert>
+                <div class="d-flex flex-wrap align-center ga-2 mb-4">
+                  <!-- href only while enabled: a disabled <a> would still be keyboard-activatable -->
+                  <v-btn
+                    variant="outlined"
+                    :href="settingsStore.deviceSettings.busEnabled ? busStopMapUrl : undefined"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    :disabled="!settingsStore.deviceSettings.busEnabled"
+                  >
+                    <v-icon start>mdi-map-marker</v-icon>
+                    Find nearby bus stops
+                  </v-btn>
+                  <span class="text-body-2 text-medium-emphasis">
+                    Use Google Maps to locate a nearby bus stop, then enter its stop number above.
+                  </span>
+                </div>
                 <v-text-field
                   v-model="settingsStore.deviceSettings.busServices"
                   label="Bus Services"
@@ -820,26 +778,28 @@ async function performFactoryReset() {
                   :disabled="!settingsStore.deviceSettings.busEnabled"
                 />
                 <v-row>
-                  <v-col cols="6" md="3">
+                  <v-col cols="12" sm="6" md="3">
                     <v-text-field
                       v-model="settingsStore.deviceSettings.busTimeStart"
                       label="Show Bus Timings From"
                       type="time"
                       variant="outlined"
+                      hide-details
                       :disabled="!settingsStore.deviceSettings.busEnabled"
                     />
                   </v-col>
-                  <v-col cols="6" md="3">
+                  <v-col cols="12" sm="6" md="3">
                     <v-text-field
                       v-model="settingsStore.deviceSettings.busTimeEnd"
                       label="Show Bus Timings To"
                       type="time"
                       variant="outlined"
+                      hide-details
                       :disabled="!settingsStore.deviceSettings.busEnabled"
                     />
                   </v-col>
                 </v-row>
-                <v-alert type="info" variant="tonal" density="compact">
+                <v-alert type="info" variant="tonal" density="compact" class="mt-4">
                   Bus timings are shown only during this time range.
                 </v-alert>
               </v-card-text>
