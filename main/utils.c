@@ -1153,9 +1153,10 @@ esp_err_t fetch_and_save_image_from_url(const char *url, char *saved_image_path,
 
 esp_err_t trigger_image_rotation(void)
 {
-    // Bus arrivals take the place of photos while their time window is active
-    if (bus_arrivals_is_active() && bus_arrivals_show() == ESP_OK) {
-        return ESP_OK;
+    // Bus arrivals take the place of photos while their time window is active. Fetch errors
+    // are drawn on screen; anything else is retried at the next refresh.
+    if (bus_arrivals_is_active()) {
+        return bus_arrivals_show();
     }
 
     rotation_mode_t rotation_mode = config_manager_get_rotation_mode();
