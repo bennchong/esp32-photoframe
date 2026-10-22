@@ -26,7 +26,7 @@ This project has companion tools for different use cases:
 
 ## Image Quality Comparison
 
-**🎨 [Try the Interactive Demo](https://aitjcize.github.io/esp32-photoframe/)** - Drag the slider to compare algorithms in real-time with your own images!
+**🎨 [Try the Interactive Demo](https://bennchong.github.io/esp32-photoframe/)** - Drag the slider to compare algorithms in real-time with your own images!
 
 <table>
 <tr>
@@ -135,7 +135,7 @@ Boards with larger flash chips (XIAO EE02/EE04, reTerminal E1002) use internal f
 
 ### Web Flasher (Easiest) ⚡
 
-**[🌐 Flash from Browser](https://aitjcize.github.io/esp32-photoframe/#flash)** - Chrome/Edge/Opera required
+**[🌐 Flash from Browser](https://bennchong.github.io/esp32-photoframe/#flash)** - Chrome/Edge/Opera required
 
 ### Manual Flash
 
