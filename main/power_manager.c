@@ -18,6 +18,7 @@
 #endif
 
 #include "board_hal.h"
+#include "bus_arrivals.h"
 #include "config.h"
 #include "config_manager.h"
 #include "periodic_tasks.h"
@@ -52,8 +53,8 @@ static void rotation_timer_task(void *arg)
             continue;
         }
 
-        // Handle active rotation when device stays awake and auto-rotate enabled
-        if (config_manager_get_auto_rotate()) {
+        // Handle active rotation when device stays awake and auto-rotate or bus arrivals are on
+        if (config_manager_get_auto_rotate() || bus_arrivals_is_enabled()) {
             // Check if we're in sleep schedule
             if (config_manager_is_in_sleep_schedule()) {
                 // During sleep schedule, don't rotate
@@ -309,13 +310,11 @@ void power_manager_enter_sleep(void)
     board_hal_led_set(BOARD_HAL_LED_POWER, false);
     board_hal_led_set(BOARD_HAL_LED_ACTIVITY, false);
 
-    // Check if auto-rotate is enabled
-    if (config_manager_get_auto_rotate()) {
-        // Use timer-based sleep for auto-rotate
+    // Wake on a timer for auto-rotate and bus arrival refreshes
+    if (config_manager_get_auto_rotate() || bus_arrivals_is_enabled()) {
         int wake_seconds = get_seconds_until_next_wakeup();
 
-        ESP_LOGI(TAG, "Auto-rotate enabled, setting timer wake-up for %d seconds (%s)",
-                 wake_seconds,
+        ESP_LOGI(TAG, "Setting timer wake-up for %d seconds (%s)", wake_seconds,
                  config_manager_get_auto_rotate_aligned() ? "clock-aligned" : "interval");
         esp_sleep_enable_timer_wakeup(wake_seconds * 1000000ULL);
 

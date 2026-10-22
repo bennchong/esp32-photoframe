@@ -1,5 +1,6 @@
 set(SOURCES
     "album_manager.c"
+    "bus_arrivals.c"
     "cert_pin.c"
     "color_palette.c"
     "config_manager.c"

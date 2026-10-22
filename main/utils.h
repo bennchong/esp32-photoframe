@@ -72,9 +72,10 @@ const char *get_setup_ap_ssid(void);
 // EInk Display - LTA Data Mall
 // ============================================================================
 
-// Fetch LTA Data Mall bus arrival info for a bus stop, filtered by configured services.
+// Fetch LTA Data Mall bus arrival info for a bus stop.
 // account_key may be NULL/empty to use the stored config account key.
-// response_out receives a cJSON object with arrival timings (caller must free with cJSON_Delete).
+// response_out receives the parsed BusArrival response, with its "Services" array
+// (caller must free with cJSON_Delete).
 // http_status_out (optional) receives the HTTP status code.
 // err_out (optional) receives a human-readable error message.
 esp_err_t fetch_lta_bus_arrivals(const char *bus_stop_code, const char *account_key,

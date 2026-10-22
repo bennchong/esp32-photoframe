@@ -134,7 +134,7 @@ jobs:
           ### Web Flasher (Easiest)
 
           Flash directly from your browser (Chrome/Edge/Opera required):
-          **[https://aitjcize.github.io/esp32-photoframe/#flash](https://aitjcize.github.io/esp32-photoframe/)**
+          **[https://bennchong.github.io/esp32-photoframe/#flash](https://bennchong.github.io/esp32-photoframe/)**
 
           ### Manually
           Choose the appropriate merged binary for your board:

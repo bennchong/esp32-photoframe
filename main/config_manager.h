@@ -115,6 +115,12 @@ const char *config_manager_get_bus_stop_number(void);
 void config_manager_set_bus_services(const char *services);
 const char *config_manager_get_bus_services(void);
 
+void config_manager_set_bus_stop_number_2(const char *number);
+const char *config_manager_get_bus_stop_number_2(void);
+
+void config_manager_set_bus_services_2(const char *services);
+const char *config_manager_get_bus_services_2(void);
+
 void config_manager_set_bus_time_start(int minutes);
 int config_manager_get_bus_time_start(void);
 

@@ -6,12 +6,6 @@
 #include <unistd.h>
 
 #include "SimpleFSM.h"
-#include "album_manager.h"
-#include "board_hal.h"
-#include "color_palette.h"
-#include "config.h"
-#include "config_manager.h"
-#include "display_manager.h"
 #include "driver/gpio.h"
 #include "esp_heap_caps.h"
 #include "esp_littlefs.h"
@@ -21,6 +15,19 @@
 #include "esp_vfs_dev.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "nvs_flash.h"
+
+// Most of the project's C headers have no extern "C" guard (and epaper.h, via board_hal.h,
+// declares some functions both outside and inside one), so give them C linkage here. ESP-IDF
+// headers stay above: some define C++ operator overloads, which can't have C linkage.
+extern "C" {
+#include "album_manager.h"
+#include "board_hal.h"
+#include "bus_arrivals.h"
+#include "color_palette.h"
+#include "config.h"
+#include "config_manager.h"
+#include "display_manager.h"
 
 // External RTC support
 #ifdef CONFIG_EXT_RTC_ENABLED
@@ -31,7 +38,6 @@
 #include "image_processor.h"
 #include "mdns_service.h"
 #include "memfs.h"
-#include "nvs_flash.h"
 #include "ota_manager.h"
 #include "periodic_tasks.h"
 #include "power_manager.h"
@@ -41,13 +47,11 @@
 #include "utils.h"
 #include "wifi_manager.h"
 #include "wifi_provisioning.h"
+}
 
 static const char *TAG = "main";
 
-enum AppEvent
-{
-    APP_EVENT_NEXT = 1
-};
+enum AppEvent { APP_EVENT_NEXT = 1 };
 
 static void app_state_init_enter(void);
 static void app_state_wakeup_enter(void);
@@ -75,12 +79,8 @@ static Transition app_transitions[] = {
 
 static void app_fsm_setup(void)
 {
-    State *states[] = {&app_state_init,
-                       &app_state_wakeup,
-                       &app_state_wifi_setup,
-                       &app_state_wifi_connect,
-                       &app_state_services,
-                       &app_state_running};
+    State *states[] = {&app_state_init,         &app_state_wakeup,   &app_state_wifi_setup,
+                       &app_state_wifi_connect, &app_state_services, &app_state_running};
 
     FSMError err = app_fsm.add(states, sizeof(states) / sizeof(states[0]));
     if (err != FSMError::OK) {
@@ -259,12 +259,12 @@ void deep_sleep_wake_main(wakeup_source_t wakeup_src)
 {
     bool is_button_wake = (wakeup_src == WAKEUP_SOURCE_ROTATE_BUTTON);
     rotation_mode_t rotation_mode = config_manager_get_rotation_mode();
-    bool wifi_required = (rotation_mode == ROTATION_MODE_URL);
+    // URL mode and bus arrivals both fetch over WiFi
+    bool wifi_required = (rotation_mode == ROTATION_MODE_URL) || bus_arrivals_is_active();
     bool wifi_connected = false;
 
-    // Initialize WiFi if needed (URL mode always needs it)
     if (wifi_required) {
-        ESP_LOGI(TAG, "Initializing WiFi for URL rotation");
+        ESP_LOGI(TAG, "Initializing WiFi");
         ESP_ERROR_CHECK(wifi_manager_init());
 
         if (connect_to_wifi_with_timeout(60)) {

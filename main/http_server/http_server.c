@@ -1644,18 +1644,18 @@ static esp_err_t config_handler(httpd_req_t *req)
 
         // EInk Display - LTA Data Mall
         const char *lta_account_key = config_manager_get_lta_account_key();
-        cJSON_AddStringToObject(root,
-                                "lta_account_key",
-                                lta_account_key ? lta_account_key : "");
+        cJSON_AddStringToObject(root, "lta_account_key", lta_account_key ? lta_account_key : "");
         cJSON_AddBoolToObject(root, "bus_enabled", config_manager_get_bus_enabled());
         const char *bus_stop_number = config_manager_get_bus_stop_number();
-        cJSON_AddStringToObject(root,
-                                "bus_stop_number",
-                                bus_stop_number ? bus_stop_number : "");
+        cJSON_AddStringToObject(root, "bus_stop_number", bus_stop_number ? bus_stop_number : "");
         const char *bus_services = config_manager_get_bus_services();
         cJSON_AddStringToObject(root, "bus_services", bus_services ? bus_services : "");
-        cJSON_AddNumberToObject(
-            root, "bus_time_start", config_manager_get_bus_time_start());
+        const char *bus_stop_number_2 = config_manager_get_bus_stop_number_2();
+        cJSON_AddStringToObject(root, "bus_stop_number_2",
+                                bus_stop_number_2 ? bus_stop_number_2 : "");
+        const char *bus_services_2 = config_manager_get_bus_services_2();
+        cJSON_AddStringToObject(root, "bus_services_2", bus_services_2 ? bus_services_2 : "");
+        cJSON_AddNumberToObject(root, "bus_time_start", config_manager_get_bus_time_start());
         cJSON_AddNumberToObject(root, "bus_time_end", config_manager_get_bus_time_end());
 
         // AI API Keys
@@ -1814,7 +1814,7 @@ static esp_err_t lta_test_handler(httpd_req_t *req)
 
     if (account_key[0] == '\0') {
         snprintf(message, sizeof(message), "LTA AccountKey is required");
-        httpd_resp_set_status(req, HTTPD_400_BAD_REQUEST);
+        httpd_resp_set_status(req, HTTPD_400);
     } else {
         esp_http_client_config_t config = {
             .url = LTA_TEST_URL,
