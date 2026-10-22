@@ -123,7 +123,7 @@ typedef enum {
 #define NVS_GOOGLE_API_KEY_KEY "google_key"
 
 // OTA Configuration
-#define GITHUB_API_URL "https://api.github.com/repos/aitjcize/esp32-photoframe/releases/latest"
+#define GITHUB_API_URL "https://api.github.com/repos/bennchong/esp32-photoframe/releases/latest"
 #define OTA_CHECK_INTERVAL_MS (24 * 60 * 60 * 1000)  // 24 hours
 
 #endif
