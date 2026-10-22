@@ -156,6 +156,65 @@ const resetting = ref(false);
 const showImportDialog = ref(false);
 const importData = ref(null);
 const importFileName = ref("");
+const ltaTesting = ref(false);
+const ltaTestStatus = ref("");
+const ltaTestMessage = ref("");
+
+// Browsers block the Geolocation API on the device's plain-HTTP origin, so let Google Maps
+// resolve "near me" itself.
+const busStopMapUrl = "https://www.google.com/maps/search/?api=1&query=bus+stops+near+me";
+
+const busStopFields = [
+  {
+    number: "busStopNumber",
+    services: "busServices",
+    numberLabel: "Stop 1 number",
+    servicesLabel: "Stop 1 services",
+  },
+  {
+    number: "busStopNumber2",
+    services: "busServices2",
+    numberLabel: "Stop 2 number (optional)",
+    servicesLabel: "Stop 2 services",
+  },
+];
+
+const busStopNumberRule = (value) =>
+  !value?.trim() || /^\d{5}$/.test(value.trim()) || "Enter the 5-digit stop number";
+const busServicesRule = (value) =>
+  (value || "").split(",").filter((service) => service.trim()).length <= 5 ||
+  "Up to 5 services per stop";
+
+async function testLtaAccountKey() {
+  ltaTesting.value = true;
+  ltaTestStatus.value = "";
+  ltaTestMessage.value = "";
+
+  try {
+    const response = await fetch("/api/lta/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        lta_account_key: settingsStore.deviceSettings.ltaAccountKey,
+      }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (response.ok && data.valid) {
+      ltaTestStatus.value = "success";
+      ltaTestMessage.value = data.message || "AccountKey is valid";
+    } else {
+      ltaTestStatus.value = "error";
+      ltaTestMessage.value =
+        data.message || `Failed to validate AccountKey (HTTP ${response.status})`;
+    }
+  } catch (error) {
+    ltaTestStatus.value = "error";
+    ltaTestMessage.value = `Failed to reach device: ${error.message || error}`;
+  } finally {
+    ltaTesting.value = false;
+  }
+}
 
 async function exportConfig() {
   try {
@@ -329,7 +388,7 @@ async function performFactoryReset() {
 
       <v-tabs v-model="tab" color="primary" show-arrows density="compact">
         <v-tab value="general"> General </v-tab>
-        <v-tab value="autoRotate"> Auto Rotate </v-tab>
+        <v-tab value="autoRotate"> EInk Display Settings </v-tab>
         <v-tab value="power"> Power </v-tab>
         <v-tab value="homeAssistant"> Home Assistant </v-tab>
         <v-tab value="processing"> Processing </v-tab>
@@ -451,7 +510,7 @@ async function performFactoryReset() {
             </v-row>
           </v-tabs-window-item>
 
-          <!-- Auto Rotate Tab -->
+          <!-- EInk Display Settings Tab -->
           <v-tabs-window-item value="autoRotate">
             <v-switch
               v-model="settingsStore.deviceSettings.autoRotate"
@@ -663,6 +722,122 @@ async function performFactoryReset() {
                 Images won't rotate during this period. Useful for night hours.
               </v-alert>
             </div>
+
+            <v-divider class="my-4" />
+
+            <v-card variant="tonal" class="mb-4">
+              <v-card-title class="text-subtitle-1">LTA Data Mall</v-card-title>
+              <v-card-text>
+                <v-switch
+                  v-model="settingsStore.deviceSettings.busEnabled"
+                  label="Enable Bus Arrivals"
+                  color="primary"
+                  class="mb-4"
+                  hide-details
+                />
+                <v-text-field
+                  v-model="settingsStore.deviceSettings.ltaAccountKey"
+                  label="LTA Data Mall AccountKey"
+                  type="password"
+                  variant="outlined"
+                  hint="API key for LTA Data Mall"
+                  persistent-hint
+                  class="mb-4"
+                  :disabled="!settingsStore.deviceSettings.busEnabled"
+                />
+                <v-btn
+                  variant="outlined"
+                  class="mb-4"
+                  :loading="ltaTesting"
+                  :disabled="!settingsStore.deviceSettings.busEnabled"
+                  @click="testLtaAccountKey"
+                >
+                  <v-icon start>mdi-shield-check</v-icon>
+                  Test AccountKey
+                </v-btn>
+                <v-alert
+                  v-if="ltaTestMessage"
+                  :type="ltaTestStatus === 'success' ? 'success' : 'error'"
+                  variant="tonal"
+                  density="compact"
+                  class="mb-4"
+                >
+                  {{ ltaTestMessage }}
+                </v-alert>
+                <div class="text-subtitle-2 mb-3">Bus stops</div>
+                <v-row v-for="stop in busStopFields" :key="stop.number" dense>
+                  <v-col cols="12" sm="4">
+                    <v-text-field
+                      v-model="settingsStore.deviceSettings[stop.number]"
+                      :label="stop.numberLabel"
+                      placeholder="e.g. 83139"
+                      inputmode="numeric"
+                      variant="outlined"
+                      hide-details="auto"
+                      :rules="[busStopNumberRule]"
+                      :disabled="!settingsStore.deviceSettings.busEnabled"
+                    />
+                  </v-col>
+                  <v-col cols="12" sm="8">
+                    <v-text-field
+                      v-model="settingsStore.deviceSettings[stop.services]"
+                      :label="stop.servicesLabel"
+                      placeholder="e.g. 12, 36, 851"
+                      variant="outlined"
+                      hide-details="auto"
+                      :rules="[busServicesRule]"
+                      :disabled="!settingsStore.deviceSettings.busEnabled"
+                    />
+                  </v-col>
+                </v-row>
+                <div class="text-caption text-medium-emphasis mt-2 mb-3">
+                  List up to 5 services per stop, separated by commas. Leave a list empty to show
+                  the first 5 services at that stop.
+                </div>
+                <div class="d-flex flex-wrap align-center ga-2 mb-4">
+                  <!-- href only while enabled: a disabled <a> would still be keyboard-activatable -->
+                  <v-btn
+                    variant="outlined"
+                    :href="settingsStore.deviceSettings.busEnabled ? busStopMapUrl : undefined"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    :disabled="!settingsStore.deviceSettings.busEnabled"
+                  >
+                    <v-icon start>mdi-map-marker</v-icon>
+                    Find nearby bus stops
+                  </v-btn>
+                  <span class="text-body-2 text-medium-emphasis">
+                    Use Google Maps to locate a nearby bus stop, then enter its stop number above.
+                  </span>
+                </div>
+                <v-row>
+                  <v-col cols="12" sm="6" md="3">
+                    <v-text-field
+                      v-model="settingsStore.deviceSettings.busTimeStart"
+                      label="Show Bus Timings From"
+                      type="time"
+                      variant="outlined"
+                      hide-details
+                      :disabled="!settingsStore.deviceSettings.busEnabled"
+                    />
+                  </v-col>
+                  <v-col cols="12" sm="6" md="3">
+                    <v-text-field
+                      v-model="settingsStore.deviceSettings.busTimeEnd"
+                      label="Show Bus Timings To"
+                      type="time"
+                      variant="outlined"
+                      hide-details
+                      :disabled="!settingsStore.deviceSettings.busEnabled"
+                    />
+                  </v-col>
+                </v-row>
+                <v-alert type="info" variant="tonal" density="compact" class="mt-4">
+                  The frame shows bus arrivals instead of photos during this time range, refreshing
+                  every 2 minutes. On battery, keep the range short.
+                </v-alert>
+              </v-card-text>
+            </v-card>
           </v-tabs-window-item>
 
           <!-- Power Tab -->

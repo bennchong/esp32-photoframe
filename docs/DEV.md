@@ -126,7 +126,9 @@ esp32-photoframe/
 │   ├── main.c                 # Entry point
 │   ├── config.h               # Configuration
 │   ├── display_manager.c      # E-paper display control
-│   ├── http_server.c          # Web server and API
+│   ├── http_server/           # Web server and API
+│   │   ├── http_server.c
+│   │   └── http_server.h
 │   ├── image_processor.c      # Image processing (dithering, tone mapping)
 │   ├── power_manager.c        # Sleep/wake management
 │   └── webapp/                # Web interface files

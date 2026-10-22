@@ -19,7 +19,6 @@ typedef enum {
 #define WIFI_SSID_MAX_LEN 32
 #define WIFI_PASS_MAX_LEN 64
 #define IMAGE_URL_MAX_LEN 256
-#define HA_URL_MAX_LEN 256
 #define ROTATION_MODE_MAX_LEN 16
 #define TIMEZONE_MAX_LEN 64
 #define NTP_SERVER_MAX_LEN 128
@@ -28,12 +27,14 @@ typedef enum {
 #define HTTP_HEADER_VALUE_MAX_LEN 512
 #define CA_CERT_MAX_LEN 4096
 #define HTTP_ETAG_MAX_LEN 128
+#define LTA_ACCOUNT_KEY_MAX_LEN 256
+#define BUS_STOP_NUMBER_MAX_LEN 16
+#define BUS_SERVICES_MAX_LEN 128
 
 #define DEFAULT_DEVICE_NAME "PhotoFrame"
 #define DEFAULT_WIFI_SSID "PhotoFrame"
 #define DEFAULT_WIFI_PASSWORD "photoframe123"
 #define DEFAULT_IMAGE_URL "https://loremflickr.com/800/480"
-#define DEFAULT_HA_URL ""
 #define DEFAULT_TIMEZONE "UTC0"
 #define DEFAULT_NTP_SERVER "pool.ntp.org"
 
@@ -61,6 +62,11 @@ typedef enum {
 #endif
 
 #define IMAGE_ROTATE_INTERVAL_SEC 3600
+
+// Bus arrivals refresh this often while their time window is active. A wake-up up to
+// BUS_WINDOW_LEAD_SEC before the window opens counts as inside it, which absorbs RTC drift.
+#define BUS_REFRESH_INTERVAL_SEC 120
+#define BUS_WINDOW_LEAD_SEC 60
 
 // WiFi
 #define NVS_WIFI_SSID_KEY "wifi_ssid"
@@ -98,11 +104,18 @@ typedef enum {
 #define NVS_SAVE_DOWNLOADED_KEY "save_dl"
 #define NVS_IMAGE_ETAG_KEY "image_etag"
 
+// EInk Display - LTA Data Mall
+#define NVS_LTA_ACCOUNT_KEY "lta_key"
+#define NVS_BUS_ENABLED_KEY "bus_en"
+#define NVS_BUS_STOP_NUMBER_KEY "bus_stop"
+#define NVS_BUS_SERVICES_KEY "bus_svcs"
+#define NVS_BUS_STOP_NUMBER_2_KEY "bus_stop2"
+#define NVS_BUS_SERVICES_2_KEY "bus_svcs2"
+#define NVS_BUS_TIME_START_KEY "bus_time_s"
+#define NVS_BUS_TIME_END_KEY "bus_time_e"
+
 // Power
 #define NVS_DEEP_SLEEP_KEY "deep_sleep"
-
-// Home Assistant
-#define NVS_HA_URL_KEY "ha_url"
 
 // AI API Keys (for webapp client use)
 #define AI_API_KEY_MAX_LEN 256
@@ -110,7 +123,7 @@ typedef enum {
 #define NVS_GOOGLE_API_KEY_KEY "google_key"
 
 // OTA Configuration
-#define GITHUB_API_URL "https://api.github.com/repos/aitjcize/esp32-photoframe/releases/latest"
+#define GITHUB_API_URL "https://api.github.com/repos/bennchong/esp32-photoframe/releases/latest"
 #define OTA_CHECK_INTERVAL_MS (24 * 60 * 60 * 1000)  // 24 hours
 
 #endif

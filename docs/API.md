@@ -129,7 +129,14 @@ Get current device configuration.
   "http_header_key": "",
   "http_header_value": "",
   "save_downloaded_images": true,
-  "ha_url": "",
+  "lta_account_key": "",
+  "bus_enabled": false,
+  "bus_stop_number": "",
+  "bus_services": "",
+  "bus_stop_number_2": "",
+  "bus_services_2": "",
+  "bus_time_start": 0,
+  "bus_time_end": 1439,
   "openai_api_key": "",
   "google_api_key": "",
   "deep_sleep_enabled": true
@@ -156,7 +163,17 @@ Get current device configuration.
 - `access_token`: Bearer token for image URL authentication
 - `http_header_key`/`http_header_value`: Custom HTTP header for image fetches
 - `save_downloaded_images`: Save fetched images to Downloads album
-- `ha_url`: Home Assistant URL for integration
+- `lta_account_key`: LTA Data Mall AccountKey
+- `bus_enabled`: Enable bus arrivals display. During the bus display window (outside the sleep
+  schedule) the frame shows live arrivals instead of photos, refreshing every 2 minutes and
+  waking when the window opens
+- `bus_stop_number`: Bus stop number for LTA Data Mall queries
+- `bus_services`: Comma-separated bus service list, up to 5 shown in the order given (empty for
+  the first 5 at the stop)
+- `bus_stop_number_2`: Optional second bus stop number
+- `bus_services_2`: Service list for the second stop, same format as `bus_services`
+- `bus_time_start`: Start time in minutes since midnight for bus display window
+- `bus_time_end`: End time in minutes since midnight for bus display window
 - `openai_api_key`/`google_api_key`: AI API keys for client-side generation
 - `deep_sleep_enabled`: Enable deep sleep between rotations
 
@@ -186,6 +203,28 @@ Update configuration. Only include fields to change.
 ### `PATCH /api/config`
 
 Same as `POST /api/config`. Both methods accept partial updates.
+
+### `POST /api/lta/test`
+
+Validate an LTA Data Mall AccountKey. Optionally supply a key in the request body; otherwise the
+device will use the stored `lta_account_key` from configuration.
+
+**Request (optional body):**
+```json
+{
+  "lta_account_key": "your-account-key"
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "valid": true,
+  "message": "AccountKey is valid",
+  "http_status": 200
+}
+```
 
 ---
 

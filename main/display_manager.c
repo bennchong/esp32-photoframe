@@ -1,6 +1,7 @@
 #include "display_manager.h"
 
 #include <dirent.h>
+#include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 #include <sys/stat.h>
@@ -81,6 +82,216 @@ static void create_image_link(const char *target_path)
         ESP_LOGD(TAG, "Created link file pointing to: %s", target_path);
     } else {
         ESP_LOGE(TAG, "Failed to create link file");
+    }
+}
+
+// Bus arrival screen layout. Font24 (17x24) is the only Latin font, so text sizes are whole
+// multiples of it.
+#define BUS_MARGIN 10
+#define BUS_PANEL_GAP 14
+#define BUS_BAND_HEIGHT 36
+#define BUS_GAP 6
+#define BUS_ROW_MAX_HEIGHT 84
+#define BUS_SERVICE_WIDTH 116
+#define BUS_CELL_PADDING 3
+// Font24 digits are inked on glyph rows 2-16: their visual centre is 9.5 rows below the glyph
+// top and the baseline is the 17th row.
+#define BUS_FONT_INK_CENTER_X2 19
+#define BUS_FONT_BASELINE_ROWS 17
+
+static uint16_t bus_text_width(const char *text, uint8_t scale)
+{
+    return text ? strlen(text) * Font24.Width * scale : 0;
+}
+
+// Largest scale up to max_scale at which text fits in max_width
+static uint8_t bus_fit_scale(const char *text, uint16_t max_width, uint8_t max_scale)
+{
+    uint8_t scale = max_scale;
+    while (scale > 1 && bus_text_width(text, scale) > max_width) {
+        scale--;
+    }
+    return scale;
+}
+
+// Top y that visually centres digits and capitals on center_y
+static uint16_t bus_text_top(uint16_t center_y, uint8_t scale)
+{
+    uint16_t offset = (BUS_FONT_INK_CENTER_X2 * scale) / 2;
+    return center_y > offset ? center_y - offset : 0;
+}
+
+static void bus_draw_text(uint16_t x, uint16_t y, const char *text, uint16_t color, uint8_t scale)
+{
+    // Paint_DrawString_EN_Scaled() hands its two colours to Paint_DrawChar_Scaled() swapped (a
+    // quirk inherited from the Waveshare library), so the glyph colour goes in the second slot.
+    Paint_DrawString_EN_Scaled(x, y, text, &Font24, EPD_7IN3E_WHITE, color, scale, true);
+}
+
+// Draw as many characters of text as fit in max_width
+static void bus_draw_text_clipped(uint16_t x, uint16_t y, uint16_t max_width, const char *text,
+                                  uint16_t color, uint8_t scale)
+{
+    char clipped[48];
+    int max_chars = max_width / (Font24.Width * scale);
+    if (!text || max_chars <= 0) {
+        return;
+    }
+    snprintf(clipped, sizeof(clipped), "%.*s", max_chars, text);
+    for (size_t i = 0; clipped[i] != '\0'; i++) {
+        unsigned char ch = (unsigned char) clipped[i];
+        if (ch < ' ' || ch > '~') {
+            clipped[i] = '?';
+        }
+    }
+    bus_draw_text(x, y, clipped, color, scale);
+}
+
+static void bus_draw_text_centered(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
+                                   const char *text, uint16_t color, uint8_t max_scale)
+{
+    uint16_t max_width = width - 2 * BUS_CELL_PADDING;
+    uint8_t scale = bus_fit_scale(text, max_width, max_scale);
+    uint16_t text_width = bus_text_width(text, scale);
+    if (text_width > max_width) {
+        text_width = max_width - max_width % (Font24.Width * scale);
+    }
+    bus_draw_text_clipped(x + (width - text_width) / 2, bus_text_top(y + height / 2, scale),
+                          max_width, text, color, scale);
+}
+
+// Paint_DrawRectangle() leaves out the last row when filling, so pass an exclusive end
+static void bus_fill(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color)
+{
+    Paint_DrawRectangle(x, y, x + width - 1, y + height, color, DOT_PIXEL_1X1, DRAW_FILL_FULL);
+}
+
+static void bus_draw_cell(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t fill)
+{
+    bus_fill(x, y, width, height, fill);
+    Paint_DrawRectangle(x, y, x + width - 1, y + height - 1, EPD_7IN3E_BLACK, DOT_PIXEL_1X1,
+                        DRAW_FILL_EMPTY);
+}
+
+static void bus_draw_service_cell(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
+                                  const char *service_no)
+{
+    bus_draw_cell(x, y, width, height, EPD_7IN3E_BLACK);
+    bus_draw_text_centered(x, y, width, height, (service_no && service_no[0]) ? service_no : "?",
+                           EPD_7IN3E_WHITE, 2);
+}
+
+// arrival is "ARR" or whole minutes; anything else is shown as-is and NULL/empty as "-"
+static void bus_draw_arrival_cell(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
+                                  const char *arrival)
+{
+    const char *text = "-";
+    const char *unit = NULL;
+    uint16_t fill = EPD_7IN3E_WHITE;
+    uint16_t ink = EPD_7IN3E_BLACK;
+
+    if (arrival && arrival[0]) {
+        char *end = NULL;
+        long minutes = strtol(arrival, &end, 10);
+        bool numeric = end != arrival && *end == '\0';
+
+        text = arrival;
+        if (strcasecmp(arrival, "ARR") == 0 || (numeric && minutes <= 0)) {
+            text = "Arr";
+            fill = EPD_7IN3E_RED;
+            ink = EPD_7IN3E_WHITE;
+        } else if (numeric) {
+            unit = "min";
+            // White reads better than black on the panel's dark green
+            fill = (minutes <= 5) ? EPD_7IN3E_GREEN : EPD_7IN3E_YELLOW;
+            ink = (minutes <= 5) ? EPD_7IN3E_WHITE : EPD_7IN3E_BLACK;
+        }
+    }
+
+    bus_draw_cell(x, y, width, height, fill);
+
+    // "<n> min": the number at 2x with the unit at 1x on its baseline, dropping the unit when the
+    // pair doesn't fit
+    uint16_t max_width = width - 2 * BUS_CELL_PADDING;
+    uint8_t scale = bus_fit_scale(text, max_width, 2);
+    uint16_t text_width = bus_text_width(text, scale);
+    uint16_t unit_gap = 2;
+    if (unit && (scale < 2 || text_width + unit_gap + bus_text_width(unit, 1) > max_width)) {
+        unit = NULL;
+    }
+    if (!unit) {
+        bus_draw_text_centered(x, y, width, height, text, ink, 2);
+        return;
+    }
+
+    uint16_t group_width = text_width + unit_gap + bus_text_width(unit, 1);
+    uint16_t text_x = x + (width - group_width) / 2;
+    uint16_t text_y = bus_text_top(y + height / 2, scale);
+    bus_draw_text(text_x, text_y, text, ink, scale);
+    bus_draw_text(text_x + text_width + unit_gap, text_y + BUS_FONT_BASELINE_ROWS * (scale - 1),
+                  unit, ink, 1);
+}
+
+// Black band with the stop code in a white badge, followed by the stop name
+static void bus_draw_stop_band(uint16_t x, uint16_t y, uint16_t width,
+                               const display_manager_bus_stop_t *stop)
+{
+    bool has_id = stop->stop_id && stop->stop_id[0];
+    const char *name = (stop->stop_name && stop->stop_name[0]) ? stop->stop_name : stop->stop_desc;
+    if ((!name || !name[0]) && !has_id) {
+        name = "Bus stop";
+    }
+
+    uint16_t text_x = x + 8;
+    uint16_t text_y = y + (BUS_BAND_HEIGHT - Font24.Height) / 2;
+
+    bus_fill(x, y, width, BUS_BAND_HEIGHT, EPD_7IN3E_BLACK);
+
+    if (has_id) {
+        uint16_t badge_width = bus_text_width(stop->stop_id, 1) + 12;
+        if (badge_width > width / 2) {
+            badge_width = width / 2;
+        }
+        bus_fill(text_x, y + 5, badge_width, BUS_BAND_HEIGHT - 10, EPD_7IN3E_WHITE);
+        bus_draw_text_clipped(text_x + 6, text_y, badge_width - 12, stop->stop_id, EPD_7IN3E_BLACK,
+                              1);
+        text_x += badge_width + 10;
+    }
+
+    if (name && name[0] && x + width > text_x + 8) {
+        bus_draw_text_clipped(text_x, text_y, x + width - 8 - text_x, name, EPD_7IN3E_WHITE, 1);
+    }
+}
+
+// One stop: its band, then a row per service with the service number and next arrivals
+static void bus_draw_stop_panel(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
+                                const display_manager_bus_stop_t *stop, uint16_t row_height)
+{
+    bus_draw_stop_band(x, y, width, stop);
+
+    uint16_t rows_y = y + BUS_BAND_HEIGHT + BUS_GAP;
+    size_t service_count = stop->services ? stop->service_count : 0;
+    if (service_count > DISPLAY_MANAGER_BUS_MAX_SERVICES) {
+        service_count = DISPLAY_MANAGER_BUS_MAX_SERVICES;
+    }
+    if ((stop->message && stop->message[0]) || service_count == 0) {
+        const char *message = (stop->message && stop->message[0]) ? stop->message : "No services";
+        bus_draw_text_centered(x, rows_y, width, y + height - rows_y, message, EPD_7IN3E_BLACK, 1);
+        return;
+    }
+
+    uint16_t arrival_width =
+        (width - BUS_SERVICE_WIDTH - BUS_GAP * DISPLAY_MANAGER_BUS_MAX_ARRIVALS) /
+        DISPLAY_MANAGER_BUS_MAX_ARRIVALS;
+    for (size_t row = 0; row < service_count; row++) {
+        const display_manager_bus_service_t *service = &stop->services[row];
+        uint16_t row_y = rows_y + row * (row_height + BUS_GAP);
+
+        bus_draw_service_cell(x, row_y, BUS_SERVICE_WIDTH, row_height, service->service_no);
+        for (size_t col = 0; col < DISPLAY_MANAGER_BUS_MAX_ARRIVALS; col++) {
+            uint16_t cell_x = x + BUS_SERVICE_WIDTH + BUS_GAP + col * (arrival_width + BUS_GAP);
+            bus_draw_arrival_cell(cell_x, row_y, arrival_width, row_height, service->arrivals[col]);
+        }
     }
 }
 
@@ -387,6 +598,106 @@ esp_err_t display_manager_show_setup_screen(void)
     xSemaphoreGive(display_mutex);
 
     ESP_LOGI(TAG, "Setup screen displayed successfully");
+    return ESP_OK;
+}
+
+esp_err_t display_manager_show_bus_timing_screen(const display_manager_bus_screen_t *screen)
+{
+    if (!screen) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (xSemaphoreTake(display_mutex, pdMS_TO_TICKS(5000)) != pdTRUE) {
+        ESP_LOGE(TAG, "Failed to acquire display mutex for bus screen");
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "Displaying bus arrival timing screen");
+
+    display_manager_initialize_paint();
+    Paint_Clear(EPD_7IN3E_WHITE);
+
+    const uint16_t width = Paint.Width;
+    const uint16_t height = Paint.Height;
+
+    // Header: title on the left, update time on the right. The title is clipped so the two never
+    // overlap on the narrower portrait canvas.
+    char updated_text[40] = "";
+    if (screen->last_updated && screen->last_updated[0]) {
+        snprintf(updated_text, sizeof(updated_text), "Updated %s", screen->last_updated);
+    }
+    uint16_t header_width = width - 2 * BUS_MARGIN;
+    uint16_t updated_width = bus_text_width(updated_text, 1);
+    if (updated_width > header_width) {
+        updated_width = header_width - header_width % Font24.Width;
+    }
+    if (updated_width > 0) {
+        bus_draw_text_clipped(width - BUS_MARGIN - updated_width, BUS_MARGIN, updated_width,
+                              updated_text, EPD_7IN3E_BLACK, 1);
+    }
+    const char *title = (screen->title && screen->title[0]) ? screen->title : "Bus arrivals";
+    int title_width = header_width - (updated_width > 0 ? updated_width + Font24.Width : 0);
+    if (title_width > 0) {
+        bus_draw_text_clipped(BUS_MARGIN, BUS_MARGIN, title_width, title, EPD_7IN3E_BLACK, 1);
+    }
+
+    uint16_t rule_y = BUS_MARGIN + Font24.Height + 6;
+    Paint_DrawLine(BUS_MARGIN, rule_y, width - BUS_MARGIN, rule_y, EPD_7IN3E_BLACK, DOT_PIXEL_1X1,
+                   LINE_STYLE_SOLID);
+
+    uint16_t content_y = rule_y + 8;
+    uint16_t content_height = height - BUS_MARGIN - content_y;
+
+    size_t stop_count = screen->stops ? screen->stop_count : 0;
+    if (stop_count > DISPLAY_MANAGER_BUS_MAX_STOPS) {
+        stop_count = DISPLAY_MANAGER_BUS_MAX_STOPS;
+    }
+
+    if (stop_count == 0) {
+        bus_draw_text_centered(0, content_y, width, content_height, "No bus data", EPD_7IN3E_BLACK,
+                               2);
+    } else {
+        // Two stops sit side by side in landscape and stack in portrait
+        bool stacked = stop_count > 1 && width < height;
+        uint16_t panel_width = width - 2 * BUS_MARGIN;
+        uint16_t panel_height = content_height;
+        if (stop_count > 1 && stacked) {
+            panel_height = (content_height - BUS_PANEL_GAP) / 2;
+        } else if (stop_count > 1) {
+            panel_width = (panel_width - BUS_PANEL_GAP) / 2;
+        }
+
+        // Size the rows for the busiest stop so both panels share one grid
+        size_t rows = 1;
+        for (size_t i = 0; i < stop_count; i++) {
+            const display_manager_bus_stop_t *stop = &screen->stops[i];
+            size_t service_count = stop->services ? stop->service_count : 0;
+            if (service_count > rows) {
+                rows = service_count;
+            }
+        }
+        if (rows > DISPLAY_MANAGER_BUS_MAX_SERVICES) {
+            rows = DISPLAY_MANAGER_BUS_MAX_SERVICES;
+        }
+        uint16_t rows_height = panel_height - BUS_BAND_HEIGHT - BUS_GAP;
+        uint16_t row_height = (rows_height - (rows - 1) * BUS_GAP) / rows;
+        if (row_height > BUS_ROW_MAX_HEIGHT) {
+            row_height = BUS_ROW_MAX_HEIGHT;
+        }
+
+        for (size_t i = 0; i < stop_count; i++) {
+            uint16_t panel_x = BUS_MARGIN + (stacked ? 0 : i * (panel_width + BUS_PANEL_GAP));
+            uint16_t panel_y = content_y + (stacked ? i * (panel_height + BUS_PANEL_GAP) : 0);
+            bus_draw_stop_panel(panel_x, panel_y, panel_width, panel_height, &screen->stops[i],
+                                row_height);
+        }
+    }
+
+    epaper_display(epd_image_buffer);
+    current_image[0] = '\0';
+    xSemaphoreGive(display_mutex);
+
+    ESP_LOGI(TAG, "Bus arrival timing screen displayed successfully");
     return ESP_OK;
 }
 

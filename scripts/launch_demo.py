@@ -49,7 +49,7 @@ class CORSRequestHandler(SimpleHTTPRequestHandler):
         self.end_headers()
 
 
-def find_available_port(start_port=8000, max_attempts=10):
+def find_available_port(start_port=8001, max_attempts=10):
     """Find an available port starting from start_port."""
     for port in range(start_port, start_port + max_attempts):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -340,7 +340,7 @@ def generate_manifests(project_root, boards=None):
     return success
 
 
-def serve_demo(demo_dir, port=8000):
+def serve_demo(demo_dir, port=8001):
     """Start local web server to serve the demo page.
 
     The demo is built with base="/esp32-photoframe/" for GitHub Pages.
@@ -395,8 +395,8 @@ def main():
     parser.add_argument(
         "--port",
         type=int,
-        default=8000,
-        help="Port for local web server (default: 8000)",
+        default=8001,
+        help="Port for local web server (default: 8001)",
     )
     parser.add_argument(
         "--skip-build", action="store_true", help="Skip building firmware"

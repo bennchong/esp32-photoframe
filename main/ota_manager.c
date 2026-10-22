@@ -18,7 +18,6 @@
 #include "freertos/event_groups.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
-#include "ha_integration.h"
 #include "nvs.h"
 #include "periodic_tasks.h"
 #include "power_manager.h"
@@ -274,8 +273,7 @@ cleanup:
 
 static void ota_check_task(void *pvParameter)
 {
-    // pvParameter is a boolean: true = notify HA, false/NULL = don't notify
-    bool notify_ha = (pvParameter != NULL);
+    (void) pvParameter;
 
     ESP_LOGI(TAG, "Checking for firmware updates...");
 
@@ -320,12 +318,6 @@ static void ota_check_task(void *pvParameter)
 
     // Save OTA status to NVS for persistence across reboots
     ota_save_status_to_nvs();
-
-    // Notify HA if requested
-    if (notify_ha) {
-        ESP_LOGI(TAG, "Notifying HA of OTA status update");
-        ha_notify_update();
-    }
 
     vTaskDelete(NULL);
 }
@@ -541,7 +533,7 @@ static esp_err_t ota_check_periodic_callback(void)
 {
     ESP_LOGI(TAG, "Periodic OTA check triggered");
 
-    // Check for updates without notifying HA (HA will poll for status)
+    // Check for updates without blocking other startup tasks
     xTaskCreate(&ota_check_task, "ota_check_task", 12288, NULL, 5, NULL);
 
     return ESP_OK;

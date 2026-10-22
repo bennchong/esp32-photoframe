@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #include "board_hal.h"
+#include "bus_arrivals.h"
 #include "cJSON.h"
 #include "cert_pin.h"
 #include "color_palette.h"
@@ -14,6 +15,7 @@
 #include "config_manager.h"
 #include "display_manager.h"
 #include "esp_app_desc.h"
+#include "esp_crt_bundle.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
 #include "esp_mac.h"
@@ -27,6 +29,11 @@
 #include "wifi_manager.h"
 
 static const char *TAG = "utils";
+
+#define LTA_BUS_ARRIVAL_URL \
+    "https://datamall2.mytransport.sg/ltaodataservice/v3/BusArrival?BusStopCode=%s"
+#define LTA_BUS_ARRIVAL_TIMEOUT_MS 10000
+#define LTA_BUS_ARRIVAL_MAX_RESPONSE 32768
 
 // Last image fetch error (transient, not persisted)
 static char last_fetch_error[256] = {0};
@@ -253,10 +260,58 @@ esp_err_t apply_config_from_json(cJSON *root)
         config_manager_set_save_downloaded_images(cJSON_IsTrue(item));
     }
 
-    // Home Assistant
-    item = cJSON_GetObjectItem(root, "ha_url");
+    // EInk Display - LTA Data Mall. Everything except the service lists can move the next
+    // wake-up, since bus arrivals refresh on their own schedule.
+    bool bus_schedule_changed = false;
+
+    item = cJSON_GetObjectItem(root, "lta_account_key");
     if (item && cJSON_IsString(item)) {
-        config_manager_set_ha_url(cJSON_GetStringValue(item));
+        config_manager_set_lta_account_key(cJSON_GetStringValue(item));
+        bus_schedule_changed = true;
+    }
+
+    item = cJSON_GetObjectItem(root, "bus_enabled");
+    if (item && cJSON_IsBool(item)) {
+        config_manager_set_bus_enabled(cJSON_IsTrue(item));
+        bus_schedule_changed = true;
+    }
+
+    item = cJSON_GetObjectItem(root, "bus_stop_number");
+    if (item && cJSON_IsString(item)) {
+        config_manager_set_bus_stop_number(cJSON_GetStringValue(item));
+        bus_schedule_changed = true;
+    }
+
+    item = cJSON_GetObjectItem(root, "bus_services");
+    if (item && cJSON_IsString(item)) {
+        config_manager_set_bus_services(cJSON_GetStringValue(item));
+    }
+
+    item = cJSON_GetObjectItem(root, "bus_stop_number_2");
+    if (item && cJSON_IsString(item)) {
+        config_manager_set_bus_stop_number_2(cJSON_GetStringValue(item));
+        bus_schedule_changed = true;
+    }
+
+    item = cJSON_GetObjectItem(root, "bus_services_2");
+    if (item && cJSON_IsString(item)) {
+        config_manager_set_bus_services_2(cJSON_GetStringValue(item));
+    }
+
+    item = cJSON_GetObjectItem(root, "bus_time_start");
+    if (item && cJSON_IsNumber(item)) {
+        config_manager_set_bus_time_start(item->valueint);
+        bus_schedule_changed = true;
+    }
+
+    item = cJSON_GetObjectItem(root, "bus_time_end");
+    if (item && cJSON_IsNumber(item)) {
+        config_manager_set_bus_time_end(item->valueint);
+        bus_schedule_changed = true;
+    }
+
+    if (bus_schedule_changed) {
+        power_manager_reset_rotate_timer();
     }
 
     // AI API Keys
@@ -329,6 +384,172 @@ static esp_err_t http_event_handler(esp_http_client_event_t *evt)
         break;
     }
     return ESP_OK;
+}
+
+esp_err_t fetch_lta_bus_arrivals(const char *bus_stop_code, const char *account_key,
+                                 cJSON **response_out, int *http_status_out, char *err_out,
+                                 size_t err_out_len)
+{
+    if (response_out == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    *response_out = NULL;
+    if (http_status_out) {
+        *http_status_out = 0;
+    }
+    if (err_out && err_out_len > 0) {
+        err_out[0] = '\0';
+    }
+
+    if (!bus_stop_code || bus_stop_code[0] == '\0') {
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "Bus stop code is required");
+        }
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    const char *effective_key = account_key;
+    if (!effective_key || effective_key[0] == '\0') {
+        effective_key = config_manager_get_lta_account_key();
+    }
+
+    if (!effective_key || effective_key[0] == '\0') {
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "LTA AccountKey is required");
+        }
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    char url[256];
+    int url_len = snprintf(url, sizeof(url), LTA_BUS_ARRIVAL_URL, bus_stop_code);
+    if (url_len < 0 || url_len >= (int) sizeof(url)) {
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "Bus stop code is too long");
+        }
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    esp_http_client_config_t config = {
+        .url = url,
+        .method = HTTP_METHOD_GET,
+        .timeout_ms = LTA_BUS_ARRIVAL_TIMEOUT_MS,
+        .crt_bundle_attach = esp_crt_bundle_attach,
+        .user_agent = "ESP32-PhotoFrame/1.0",
+    };
+
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    if (!client) {
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "Failed to initialize HTTP client");
+        }
+        return ESP_FAIL;
+    }
+
+    esp_http_client_set_header(client, "AccountKey", effective_key);
+    esp_http_client_set_header(client, "Accept", "application/json");
+
+    esp_err_t err = ESP_FAIL;
+    bool opened = false;
+    char *response_buffer = NULL;
+
+    err = esp_http_client_open(client, 0);
+    if (err != ESP_OK) {
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "Failed to open HTTP connection: %s",
+                     esp_err_to_name(err));
+        }
+        goto cleanup;
+    }
+
+    opened = true;
+
+    int content_length = esp_http_client_fetch_headers(client);
+    int status_code = esp_http_client_get_status_code(client);
+    if (http_status_out) {
+        *http_status_out = status_code;
+    }
+
+    if (status_code != 200) {
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "LTA API returned HTTP %d", status_code);
+        }
+        err = ESP_FAIL;
+        goto cleanup;
+    }
+
+    if (content_length > LTA_BUS_ARRIVAL_MAX_RESPONSE) {
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "LTA response too large");
+        }
+        err = ESP_ERR_INVALID_SIZE;
+        goto cleanup;
+    }
+
+    response_buffer = malloc(LTA_BUS_ARRIVAL_MAX_RESPONSE + 1);
+    if (!response_buffer) {
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "Failed to allocate response buffer");
+        }
+        err = ESP_ERR_NO_MEM;
+        goto cleanup;
+    }
+
+    // Read until the stream ends: chunked replies carry no Content-Length
+    int response_len = 0;
+    while (response_len < LTA_BUS_ARRIVAL_MAX_RESPONSE) {
+        int read_len = esp_http_client_read(client, response_buffer + response_len,
+                                            LTA_BUS_ARRIVAL_MAX_RESPONSE - response_len);
+        if (read_len < 0) {
+            response_len = -1;
+            break;
+        }
+        if (read_len == 0) {
+            break;
+        }
+        response_len += read_len;
+    }
+
+    if (response_len <= 0) {
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "Failed to read LTA response");
+        }
+        err = ESP_FAIL;
+        goto cleanup;
+    }
+
+    if (response_len == LTA_BUS_ARRIVAL_MAX_RESPONSE &&
+        !esp_http_client_is_complete_data_received(client)) {
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "LTA response too large");
+        }
+        err = ESP_ERR_INVALID_SIZE;
+        goto cleanup;
+    }
+
+    response_buffer[response_len] = '\0';
+
+    cJSON *json = cJSON_Parse(response_buffer);
+    if (!json) {
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "Failed to parse LTA response JSON");
+        }
+        err = ESP_FAIL;
+        goto cleanup;
+    }
+
+    *response_out = json;
+    err = ESP_OK;
+
+cleanup:
+    if (response_buffer) {
+        free(response_buffer);
+    }
+    if (opened) {
+        esp_http_client_close(client);
+    }
+    esp_http_client_cleanup(client);
+    return err;
 }
 
 esp_err_t fetch_and_save_image_from_url(const char *url, char *saved_image_path, size_t path_size,
@@ -932,6 +1153,12 @@ esp_err_t fetch_and_save_image_from_url(const char *url, char *saved_image_path,
 
 esp_err_t trigger_image_rotation(void)
 {
+    // Bus arrivals take the place of photos while their time window is active. Fetch errors
+    // are drawn on screen; anything else is retried at the next refresh.
+    if (bus_arrivals_is_active()) {
+        return bus_arrivals_show();
+    }
+
     rotation_mode_t rotation_mode = config_manager_get_rotation_mode();
     esp_err_t result = ESP_OK;
 
@@ -1014,7 +1241,19 @@ int get_seconds_until_next_wakeup(void)
         .end_minutes = config_manager_get_sleep_schedule_end(),
     };
 
-    return calculate_next_wakeup_interval(&timeinfo, rotate_interval, aligned, &sleep_schedule);
+    int seconds =
+        calculate_next_wakeup_interval(&timeinfo, rotate_interval, aligned, &sleep_schedule);
+
+    // Refresh bus arrivals often inside their window and wake when it opens. The sleep schedule
+    // still wins: while it's on, keep the wake-up at its end.
+    if (bus_arrivals_is_enabled() && !config_manager_is_in_sleep_schedule()) {
+        seconds = calculate_bus_wakeup_interval(
+            &timeinfo, config_manager_get_auto_rotate() ? seconds : 0,
+            config_manager_get_bus_time_start(), config_manager_get_bus_time_end(),
+            BUS_REFRESH_INTERVAL_SEC, BUS_WINDOW_LEAD_SEC);
+    }
+
+    return seconds;
 }
 
 void sanitize_hostname(const char *device_name, char *hostname, size_t max_len)

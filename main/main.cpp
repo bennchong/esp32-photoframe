@@ -11,12 +11,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "album_manager.h"
-#include "board_hal.h"
-#include "color_palette.h"
-#include "config.h"
-#include "config_manager.h"
-#include "display_manager.h"
+#include "SimpleFSM.h"
 #include "driver/gpio.h"
 #include "esp_heap_caps.h"
 #include "esp_littlefs.h"
@@ -26,18 +21,29 @@
 #include "esp_vfs_dev.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "nvs_flash.h"
+
+// Most of the project's C headers have no extern "C" guard (and epaper.h, via board_hal.h,
+// declares some functions both outside and inside one), so give them C linkage here. ESP-IDF
+// headers stay above: some define C++ operator overloads, which can't have C linkage.
+extern "C" {
+#include "album_manager.h"
+#include "board_hal.h"
+#include "bus_arrivals.h"
+#include "color_palette.h"
+#include "config.h"
+#include "config_manager.h"
+#include "display_manager.h"
 
 // External RTC support
 #ifdef CONFIG_EXT_RTC_ENABLED
 #include "ext_rtc.h"
 #endif
 
-#include "ha_integration.h"
-#include "http_server.h"
+#include "http_server/http_server.h"
 #include "image_processor.h"
 #include "mdns_service.h"
 #include "memfs.h"
-#include "nvs_flash.h"
 #include "ota_manager.h"
 #include "periodic_tasks.h"
 #include "power_manager.h"
@@ -47,8 +53,53 @@
 #include "utils.h"
 #include "wifi_manager.h"
 #include "wifi_provisioning.h"
+}
 
 static const char *TAG = "main";
+
+enum AppEvent { APP_EVENT_NEXT = 1 };
+
+static void app_state_init_enter(void);
+static void app_state_wakeup_enter(void);
+static void app_state_wifi_setup_enter(void);
+static void app_state_wifi_connect_enter(void);
+static void app_state_services_enter(void);
+static void app_state_running_enter(void);
+
+static SimpleFSM app_fsm;
+
+static State app_state_init("init", app_state_init_enter);
+static State app_state_wakeup("wakeup", app_state_wakeup_enter);
+static State app_state_wifi_setup("wifi_setup", app_state_wifi_setup_enter);
+static State app_state_wifi_connect("wifi_connect", app_state_wifi_connect_enter);
+static State app_state_services("services", app_state_services_enter);
+static State app_state_running("running", app_state_running_enter, NULL, NULL, true);
+
+static Transition app_transitions[] = {
+    Transition(&app_state_init, &app_state_wakeup, APP_EVENT_NEXT),
+    Transition(&app_state_wakeup, &app_state_wifi_setup, APP_EVENT_NEXT),
+    Transition(&app_state_wifi_setup, &app_state_wifi_connect, APP_EVENT_NEXT),
+    Transition(&app_state_wifi_connect, &app_state_services, APP_EVENT_NEXT),
+    Transition(&app_state_services, &app_state_running, APP_EVENT_NEXT),
+};
+
+static void app_fsm_setup(void)
+{
+    State *states[] = {&app_state_init,         &app_state_wakeup,   &app_state_wifi_setup,
+                       &app_state_wifi_connect, &app_state_services, &app_state_running};
+
+    FSMError err = app_fsm.add(states, sizeof(states) / sizeof(states[0]));
+    if (err != FSMError::OK) {
+        ESP_LOGE(TAG, "Failed to add FSM states: %s", app_fsm.getErrorString(err));
+    }
+
+    err = app_fsm.add(app_transitions, sizeof(app_transitions) / sizeof(app_transitions[0]));
+    if (err != FSMError::OK) {
+        ESP_LOGE(TAG, "Failed to add FSM transitions: %s", app_fsm.getErrorString(err));
+    }
+
+    app_fsm.setInitialState(&app_state_init);
+}
 
 // Periodic callback for SNTP sync
 static esp_err_t sntp_sync_periodic_callback(void)
@@ -184,7 +235,6 @@ static void button_task(void *arg)
                     ESP_LOGI(TAG, "Key button pressed, triggering rotation");
                     power_manager_reset_sleep_timer();
                     trigger_image_rotation();
-                    ha_notify_update();
                 }
             }
             last_key_state = current_key_state;
@@ -209,7 +259,6 @@ static void button_task(void *arg)
                     ESP_LOGI(TAG, "Clear button pressed, clearing display");
                     power_manager_reset_sleep_timer();
                     display_manager_clear();
-                    ha_notify_update();
                 }
             }
             last_clear_state = current_clear_state;
@@ -229,15 +278,13 @@ static void button_task(void *arg)
 void deep_sleep_wake_main(wakeup_source_t wakeup_src)
 {
     bool is_button_wake = (wakeup_src == WAKEUP_SOURCE_ROTATE_BUTTON);
-    // Check rotation mode and HA configuration
     rotation_mode_t rotation_mode = config_manager_get_rotation_mode();
-    bool ha_configured = ha_is_configured();
+    // URL mode and bus arrivals both fetch over WiFi
+    bool wifi_required = (rotation_mode == ROTATION_MODE_URL) || bus_arrivals_is_active();
     bool wifi_connected = false;
 
-    // Initialize WiFi if needed (URL mode always needs it, SD card mode only if HA configured)
-    if (rotation_mode == ROTATION_MODE_URL || ha_configured) {
-        ESP_LOGI(TAG, "Initializing WiFi for %s",
-                 rotation_mode == ROTATION_MODE_URL ? "URL rotation" : "HA battery post");
+    if (wifi_required) {
+        ESP_LOGI(TAG, "Initializing WiFi");
         ESP_ERROR_CHECK(wifi_manager_init());
 
         if (connect_to_wifi_with_timeout(60)) {
@@ -249,7 +296,7 @@ void deep_sleep_wake_main(wakeup_source_t wakeup_src)
     }
 
     // Start HTTP server for 10 seconds to allow config modifications
-    if (wifi_connected && ha_configured) {
+    if (wifi_connected) {
         power_manager_reset_sleep_timer();
 
         // Check and run periodic tasks (OTA check, SNTP sync if due)
@@ -270,17 +317,15 @@ void deep_sleep_wake_main(wakeup_source_t wakeup_src)
         ESP_LOGI(TAG, "Starting HTTP server for 10 seconds before sleep");
         power_manager_reset_sleep_timer();
 
-        // Start mDNS service so HA can resolve photoframe.local
+        // Start mDNS service so devices can resolve photoframe.local
         ESP_ERROR_CHECK(mdns_service_init());
 
         ESP_ERROR_CHECK(http_server_init());
         http_server_set_ready();
-
-        ha_notify_online();
     }
 
     // After time sync (or if no WiFi needed), also check sleep schedule.
-    // This handles the case where WiFi/HA is not configured but time was
+    // This handles the case where WiFi is not configured but time was
     // restored from external RTC.
     // Exception: ROTATE button press always rotates, even during sleep schedule.
     if (!is_button_wake && config_manager_is_in_sleep_schedule()) {
@@ -293,10 +338,7 @@ void deep_sleep_wake_main(wakeup_source_t wakeup_src)
     power_manager_reset_sleep_timer();
     trigger_image_rotation();
 
-    // Notify HA that data has been updated (after both OTA check and rotation)
-    if (wifi_connected && ha_configured) {
-        ha_notify_update();
-
+    if (wifi_connected) {
         // Keep server running for 10 seconds
         ESP_LOGI(TAG, "HTTP server available for config changes");
         vTaskDelay(pdMS_TO_TICKS(10000));
@@ -310,14 +352,7 @@ void deep_sleep_wake_main(wakeup_source_t wakeup_src)
     // Won't reach here after sleep
 }
 
-/**
- * @brief Firmware entry point for cold boot and wake-up.
- *
- * @details Initializes subsystems, routes based on wake source, and starts
- * network services and the HTTP API.
- * @see flow_deep_sleep
- */
-void app_main(void)
+static void app_state_init_enter(void)
 {
     // Check reset reason to detect crashes
     esp_reset_reason_t reset_reason = esp_reset_reason();
@@ -454,7 +489,10 @@ void app_main(void)
     ESP_ERROR_CHECK(ota_manager_init());
 
     ESP_ERROR_CHECK(album_manager_init());
+}
 
+static void app_state_wakeup_enter(void)
+{
     // Check wake-up source
     wakeup_source_t wakeup_src = power_manager_get_wakeup_source();
     ESP_LOGI(TAG, "Wake-up source: %d", wakeup_src);
@@ -467,18 +505,17 @@ void app_main(void)
         display_manager_clear();      // Clear screen
         power_manager_enter_sleep();  // Go back to sleep
         // Won't reach here
-        break;
+        return;
 
     case WAKEUP_SOURCE_TIMER:
     case WAKEUP_SOURCE_ROTATE_BUTTON:
         ESP_LOGI(TAG, "Entering deep sleep wake path (timer or rotate button)");
         deep_sleep_wake_main(wakeup_src);
         // Won't reach here after sleep
-        break;
+        return;
 
     case WAKEUP_SOURCE_BOOT_BUTTON:
         ESP_LOGI(TAG, "BOOT button wakeup detected - starting WiFi and HTTP server");
-        // Continue with normal initialization
         break;
 
     default:
@@ -486,6 +523,11 @@ void app_main(void)
         break;
     }
 
+    app_fsm.trigger(APP_EVENT_NEXT);
+}
+
+static void app_state_wifi_setup_enter(void)
+{
     ESP_ERROR_CHECK(wifi_manager_init());
     ESP_ERROR_CHECK(wifi_provisioning_init());
 
@@ -554,9 +596,15 @@ void app_main(void)
             ESP_LOGI(TAG, "WiFi credentials saved! Restarting...");
             vTaskDelay(pdMS_TO_TICKS(3000));
             esp_restart();
+            return;
         }
     }
 
+    app_fsm.trigger(APP_EVENT_NEXT);
+}
+
+static void app_state_wifi_connect_enter(void)
+{
     if (connect_to_wifi_with_timeout(30)) {
         // Check and run periodic tasks (OTA check, SNTP sync if due)
         // Note: If RTC was invalid at boot, sntp_sync was already forced via
@@ -578,8 +626,14 @@ void app_main(void)
         ESP_LOGI(TAG, "Restarting to enter provisioning mode...");
         vTaskDelay(pdMS_TO_TICKS(2000));
         esp_restart();
+        return;
     }
 
+    app_fsm.trigger(APP_EVENT_NEXT);
+}
+
+static void app_state_services_enter(void)
+{
     xTaskCreate(button_task, "button_task", 8192, NULL, 5, NULL);
 
     ESP_ERROR_CHECK(http_server_init());
@@ -614,13 +668,20 @@ void app_main(void)
         }
     }
 
-    // Notify HA that device is online (HA will poll for all data via REST API)
-    ESP_LOGI(TAG, "Sending online notification to Home Assistant");
-    ha_notify_online();
+    app_fsm.trigger(APP_EVENT_NEXT);
+}
 
+static void app_state_running_enter(void)
+{
     ESP_LOGI(TAG, "PhotoFrame started successfully");
 
     // Delay OTA check to avoid competing with boot-time network activity
     vTaskDelay(pdMS_TO_TICKS(10000));
     ota_check_for_update(NULL, 0);
+}
+
+extern "C" void app_main(void)
+{
+    app_fsm_setup();
+    app_fsm.trigger(APP_EVENT_NEXT);
 }

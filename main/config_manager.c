@@ -45,8 +45,15 @@ static char http_header_value[HTTP_HEADER_VALUE_MAX_LEN] = {0};
 static bool save_downloaded_images = false;
 static char image_etag[HTTP_ETAG_MAX_LEN] = {0};
 
-// Home Assistant
-static char ha_url[HA_URL_MAX_LEN] = {0};
+// EInk Display - LTA Data Mall
+static char lta_account_key[LTA_ACCOUNT_KEY_MAX_LEN] = {0};
+static bool bus_enabled = false;
+static char bus_stop_number[BUS_STOP_NUMBER_MAX_LEN] = {0};
+static char bus_services[BUS_SERVICES_MAX_LEN] = {0};
+static char bus_stop_number_2[BUS_STOP_NUMBER_MAX_LEN] = {0};
+static char bus_services_2[BUS_SERVICES_MAX_LEN] = {0};
+static int bus_time_start = 0;
+static int bus_time_end = 1439;
 
 // AI API Keys
 static char openai_api_key[AI_API_KEY_MAX_LEN] = {0};
@@ -249,14 +256,54 @@ esp_err_t config_manager_init(void)
             ESP_LOGI(TAG, "Loaded image ETag from NVS (length: %zu)", etag_len);
         }
 
-        // Home Assistant
-        size_t ha_url_len = HA_URL_MAX_LEN;
-        if (nvs_get_str(nvs_handle, NVS_HA_URL_KEY, ha_url, &ha_url_len) == ESP_OK) {
-            ESP_LOGI(TAG, "Loaded HA URL from NVS: %s", ha_url);
-        } else {
-            strncpy(ha_url, DEFAULT_HA_URL, HA_URL_MAX_LEN - 1);
-            ha_url[HA_URL_MAX_LEN - 1] = '\0';
-            ESP_LOGI(TAG, "No HA URL in NVS, using default (empty)");
+        // EInk Display - LTA Data Mall
+        size_t lta_key_len = LTA_ACCOUNT_KEY_MAX_LEN;
+        if (nvs_get_str(nvs_handle, NVS_LTA_ACCOUNT_KEY, lta_account_key, &lta_key_len) == ESP_OK) {
+            ESP_LOGI(TAG, "Loaded LTA AccountKey from NVS");
+        }
+
+        uint8_t stored_bus_enabled = 0;
+        if (nvs_get_u8(nvs_handle, NVS_BUS_ENABLED_KEY, &stored_bus_enabled) == ESP_OK) {
+            bus_enabled = (stored_bus_enabled != 0);
+            ESP_LOGI(TAG, "Loaded bus feature enabled from NVS: %s", bus_enabled ? "yes" : "no");
+        }
+
+        size_t bus_stop_len = BUS_STOP_NUMBER_MAX_LEN;
+        if (nvs_get_str(nvs_handle, NVS_BUS_STOP_NUMBER_KEY, bus_stop_number, &bus_stop_len) ==
+            ESP_OK) {
+            ESP_LOGI(TAG, "Loaded bus stop number from NVS: %s", bus_stop_number);
+        }
+
+        size_t bus_services_len = BUS_SERVICES_MAX_LEN;
+        if (nvs_get_str(nvs_handle, NVS_BUS_SERVICES_KEY, bus_services, &bus_services_len) ==
+            ESP_OK) {
+            ESP_LOGI(TAG, "Loaded bus services from NVS: %s", bus_services);
+        }
+
+        size_t bus_stop_2_len = BUS_STOP_NUMBER_MAX_LEN;
+        if (nvs_get_str(nvs_handle, NVS_BUS_STOP_NUMBER_2_KEY, bus_stop_number_2,
+                        &bus_stop_2_len) == ESP_OK) {
+            ESP_LOGI(TAG, "Loaded bus stop 2 number from NVS: %s", bus_stop_number_2);
+        }
+
+        size_t bus_services_2_len = BUS_SERVICES_MAX_LEN;
+        if (nvs_get_str(nvs_handle, NVS_BUS_SERVICES_2_KEY, bus_services_2, &bus_services_2_len) ==
+            ESP_OK) {
+            ESP_LOGI(TAG, "Loaded bus stop 2 services from NVS: %s", bus_services_2);
+        }
+
+        int32_t stored_bus_time_start = 0;
+        if (nvs_get_i32(nvs_handle, NVS_BUS_TIME_START_KEY, &stored_bus_time_start) == ESP_OK) {
+            bus_time_start = stored_bus_time_start;
+            ESP_LOGI(TAG, "Loaded bus time start from NVS: %d minutes (%02d:%02d)", bus_time_start,
+                     bus_time_start / 60, bus_time_start % 60);
+        }
+
+        int32_t stored_bus_time_end = 1439;
+        if (nvs_get_i32(nvs_handle, NVS_BUS_TIME_END_KEY, &stored_bus_time_end) == ESP_OK) {
+            bus_time_end = stored_bus_time_end;
+            ESP_LOGI(TAG, "Loaded bus time end from NVS: %d minutes (%02d:%02d)", bus_time_end,
+                     bus_time_end / 60, bus_time_end % 60);
         }
 
         // AI API Keys
@@ -876,29 +923,188 @@ const char *config_manager_get_image_etag(void)
 {
     return image_etag;
 }
+
 // ============================================================================
-// Home Assistant
+// EInk Display - LTA Data Mall
 // ============================================================================
 
-void config_manager_set_ha_url(const char *url)
+void config_manager_set_lta_account_key(const char *key)
 {
-    if (url) {
-        strncpy(ha_url, url, HA_URL_MAX_LEN - 1);
-        ha_url[HA_URL_MAX_LEN - 1] = '\0';
-
-        nvs_handle_t nvs_handle;
-        if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle) == ESP_OK) {
-            nvs_set_str(nvs_handle, NVS_HA_URL_KEY, ha_url);
-            nvs_commit(nvs_handle);
-            nvs_close(nvs_handle);
-        }
-
-        ESP_LOGI(TAG, "HA URL set to: %s", ha_url);
+    if (key == NULL) {
+        return;
     }
+
+    strncpy(lta_account_key, key, LTA_ACCOUNT_KEY_MAX_LEN - 1);
+    lta_account_key[LTA_ACCOUNT_KEY_MAX_LEN - 1] = '\0';
+
+    nvs_handle_t nvs_handle;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle) == ESP_OK) {
+        nvs_set_str(nvs_handle, NVS_LTA_ACCOUNT_KEY, lta_account_key);
+        nvs_commit(nvs_handle);
+        nvs_close(nvs_handle);
+    }
+
+    ESP_LOGI(TAG, "LTA AccountKey set (length: %zu)", strlen(lta_account_key));
 }
-const char *config_manager_get_ha_url(void)
+
+const char *config_manager_get_lta_account_key(void)
 {
-    return ha_url;
+    return lta_account_key;
+}
+
+void config_manager_set_bus_enabled(bool enabled)
+{
+    bus_enabled = enabled;
+
+    nvs_handle_t nvs_handle;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle) == ESP_OK) {
+        nvs_set_u8(nvs_handle, NVS_BUS_ENABLED_KEY, bus_enabled ? 1 : 0);
+        nvs_commit(nvs_handle);
+        nvs_close(nvs_handle);
+    }
+
+    ESP_LOGI(TAG, "Bus feature enabled set to: %s", bus_enabled ? "yes" : "no");
+}
+
+bool config_manager_get_bus_enabled(void)
+{
+    return bus_enabled;
+}
+
+void config_manager_set_bus_stop_number(const char *number)
+{
+    if (number == NULL) {
+        return;
+    }
+
+    strncpy(bus_stop_number, number, BUS_STOP_NUMBER_MAX_LEN - 1);
+    bus_stop_number[BUS_STOP_NUMBER_MAX_LEN - 1] = '\0';
+
+    nvs_handle_t nvs_handle;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle) == ESP_OK) {
+        nvs_set_str(nvs_handle, NVS_BUS_STOP_NUMBER_KEY, bus_stop_number);
+        nvs_commit(nvs_handle);
+        nvs_close(nvs_handle);
+    }
+
+    ESP_LOGI(TAG, "Bus stop number set to: %s", bus_stop_number);
+}
+
+const char *config_manager_get_bus_stop_number(void)
+{
+    return bus_stop_number;
+}
+
+void config_manager_set_bus_services(const char *services)
+{
+    if (services == NULL) {
+        return;
+    }
+
+    strncpy(bus_services, services, BUS_SERVICES_MAX_LEN - 1);
+    bus_services[BUS_SERVICES_MAX_LEN - 1] = '\0';
+
+    nvs_handle_t nvs_handle;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle) == ESP_OK) {
+        nvs_set_str(nvs_handle, NVS_BUS_SERVICES_KEY, bus_services);
+        nvs_commit(nvs_handle);
+        nvs_close(nvs_handle);
+    }
+
+    ESP_LOGI(TAG, "Bus services set to: %s", bus_services);
+}
+
+const char *config_manager_get_bus_services(void)
+{
+    return bus_services;
+}
+
+void config_manager_set_bus_stop_number_2(const char *number)
+{
+    if (number == NULL) {
+        return;
+    }
+
+    strncpy(bus_stop_number_2, number, BUS_STOP_NUMBER_MAX_LEN - 1);
+    bus_stop_number_2[BUS_STOP_NUMBER_MAX_LEN - 1] = '\0';
+
+    nvs_handle_t nvs_handle;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle) == ESP_OK) {
+        nvs_set_str(nvs_handle, NVS_BUS_STOP_NUMBER_2_KEY, bus_stop_number_2);
+        nvs_commit(nvs_handle);
+        nvs_close(nvs_handle);
+    }
+
+    ESP_LOGI(TAG, "Bus stop 2 number set to: %s", bus_stop_number_2);
+}
+
+const char *config_manager_get_bus_stop_number_2(void)
+{
+    return bus_stop_number_2;
+}
+
+void config_manager_set_bus_services_2(const char *services)
+{
+    if (services == NULL) {
+        return;
+    }
+
+    strncpy(bus_services_2, services, BUS_SERVICES_MAX_LEN - 1);
+    bus_services_2[BUS_SERVICES_MAX_LEN - 1] = '\0';
+
+    nvs_handle_t nvs_handle;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle) == ESP_OK) {
+        nvs_set_str(nvs_handle, NVS_BUS_SERVICES_2_KEY, bus_services_2);
+        nvs_commit(nvs_handle);
+        nvs_close(nvs_handle);
+    }
+
+    ESP_LOGI(TAG, "Bus stop 2 services set to: %s", bus_services_2);
+}
+
+const char *config_manager_get_bus_services_2(void)
+{
+    return bus_services_2;
+}
+
+void config_manager_set_bus_time_start(int minutes)
+{
+    bus_time_start = minutes;
+
+    nvs_handle_t nvs_handle;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle) == ESP_OK) {
+        nvs_set_i32(nvs_handle, NVS_BUS_TIME_START_KEY, minutes);
+        nvs_commit(nvs_handle);
+        nvs_close(nvs_handle);
+    }
+
+    ESP_LOGI(TAG, "Bus time start set to: %d minutes (%02d:%02d)", minutes, minutes / 60,
+             minutes % 60);
+}
+
+int config_manager_get_bus_time_start(void)
+{
+    return bus_time_start;
+}
+
+void config_manager_set_bus_time_end(int minutes)
+{
+    bus_time_end = minutes;
+
+    nvs_handle_t nvs_handle;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle) == ESP_OK) {
+        nvs_set_i32(nvs_handle, NVS_BUS_TIME_END_KEY, minutes);
+        nvs_commit(nvs_handle);
+        nvs_close(nvs_handle);
+    }
+
+    ESP_LOGI(TAG, "Bus time end set to: %d minutes (%02d:%02d)", minutes, minutes / 60,
+             minutes % 60);
+}
+
+int config_manager_get_bus_time_end(void)
+{
+    return bus_time_end;
 }
 
 // ============================================================================
