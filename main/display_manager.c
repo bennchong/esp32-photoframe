@@ -138,6 +138,12 @@ static void bus_draw_text_clipped(uint16_t x, uint16_t y, uint16_t max_width, co
         return;
     }
     snprintf(clipped, sizeof(clipped), "%.*s", max_chars, text);
+    for (size_t i = 0; clipped[i] != '\0'; i++) {
+        unsigned char ch = (unsigned char) clipped[i];
+        if (ch < ' ' || ch > '~') {
+            clipped[i] = '?';
+        }
+    }
     bus_draw_text(x, y, clipped, color, scale);
 }
 
