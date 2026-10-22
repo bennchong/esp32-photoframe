@@ -1,0 +1,61 @@
+/**
+ * @file components.dox
+ * @brief Component group definitions for the firmware.
+ */
+
+/**
+ * @defgroup core Core Application
+ * @brief Boot sequence and runtime orchestration.
+ *
+ * Entry points and top-level coordination for boot, wake, and periodic tasks.
+ */
+
+/**
+ * @defgroup power Power Management
+ * @brief Deep sleep handling, wake sources, and timers.
+ */
+
+/**
+ * @defgroup display Display Pipeline
+ * @brief E-paper rendering and display lifecycle.
+ */
+
+/**
+ * @defgroup image_processing Image Processing
+ * @brief Decode, dither, and transform image data for the display.
+ */
+
+/**
+ * @defgroup storage Storage & Albums
+ * @brief Persistent storage abstraction and album management.
+ */
+
+/**
+ * @defgroup network Networking
+ * @brief Wi-Fi connectivity and provisioning.
+ */
+
+/**
+ * @defgroup webapi Web API
+ * @brief HTTP server and REST endpoints.
+ */
+
+/**
+ * @defgroup config Configuration
+ * @brief Persistent configuration and runtime settings.
+ */
+
+/**
+ * @defgroup ota OTA Updates
+ * @brief Firmware update discovery and installation.
+ */
+
+/**
+ * @defgroup integration Integrations
+ * @brief External service integrations such as Home Assistant.
+ */
+
+/**
+ * @defgroup utils Utilities
+ * @brief Cross-cutting helpers shared across components.
+ */

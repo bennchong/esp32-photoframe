@@ -1,3 +1,9 @@
+/**
+ * @file config_manager.h
+ * @brief Persistent configuration and runtime settings.
+ * @ingroup config
+ */
+
 #ifndef CONFIG_MANAGER_H
 #define CONFIG_MANAGER_H
 

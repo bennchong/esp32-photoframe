@@ -1,3 +1,9 @@
+/**
+ * @file album_manager.h
+ * @brief Album discovery and selection for stored images.
+ * @ingroup storage
+ */
+
 #ifndef ALBUM_MANAGER_H
 #define ALBUM_MANAGER_H
 

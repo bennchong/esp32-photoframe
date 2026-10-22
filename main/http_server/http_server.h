@@ -1,3 +1,9 @@
+/**
+ * @file http_server.h
+ * @brief REST API server for configuration and control.
+ * @ingroup webapi
+ */
+
 #ifndef HTTP_SERVER_H
 #define HTTP_SERVER_H
 

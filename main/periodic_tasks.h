@@ -1,3 +1,9 @@
+/**
+ * @file periodic_tasks.h
+ * @brief Time-based task scheduling for system services.
+ * @ingroup core
+ */
+
 #ifndef PERIODIC_TASKS_H
 #define PERIODIC_TASKS_H
 
