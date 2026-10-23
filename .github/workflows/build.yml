@@ -24,16 +24,18 @@ jobs:
       contents: write
     strategy:
       matrix:
-        board: [waveshare_photopainter_73, seeedstudio_xiao_ee02, seeedstudio_reterminal_e1002, seeedstudio_xiao_ee04]
+        # Other boards temporarily disabled to save GitHub Actions minutes
+        board: [waveshare_photopainter_73]
+        # board: [waveshare_photopainter_73, seeedstudio_xiao_ee02, seeedstudio_reterminal_e1002, seeedstudio_xiao_ee04]
         include:
           - board: waveshare_photopainter_73
             flash_size: 16MB
-          - board: seeedstudio_xiao_ee02
-            flash_size: 16MB
-          - board: seeedstudio_reterminal_e1002
-            flash_size: 32MB
-          - board: seeedstudio_xiao_ee04
-            flash_size: 16MB
+          # - board: seeedstudio_xiao_ee02
+          #   flash_size: 16MB
+          # - board: seeedstudio_reterminal_e1002
+          #   flash_size: 32MB
+          # - board: seeedstudio_xiao_ee04
+          #   flash_size: 16MB
       fail-fast: false
 
     steps:
@@ -231,7 +233,9 @@ jobs:
         fi
         echo "Stable version: ${STABLE_TAG:-none}"
 
-        BOARDS="waveshare_photopainter_73 seeedstudio_xiao_ee02 seeedstudio_reterminal_e1002 seeedstudio_xiao_ee04"
+        # Other boards temporarily disabled to save GitHub Actions minutes (must match the build matrix)
+        BOARDS="waveshare_photopainter_73"
+        # BOARDS="waveshare_photopainter_73 seeedstudio_xiao_ee02 seeedstudio_reterminal_e1002 seeedstudio_xiao_ee04"
 
         for board in $BOARDS; do
           mkdir -p "demo/$board"
