@@ -19,9 +19,27 @@ function renameHtmlPlugin() {
   };
 }
 
+// Plugin to serve index-demo.html at the base URL in dev, matching the build's
+// rename (otherwise the dev server falls back to the firmware's index.html)
+function serveDemoHtmlPlugin() {
+  return {
+    name: "serve-demo-html",
+    configureServer(server) {
+      const base = server.config.base;
+      server.middlewares.use((req, _res, next) => {
+        const [path, query] = req.url.split("?");
+        if (path === base || path === `${base}index.html`) {
+          req.url = `${base}index-demo.html${query ? `?${query}` : ""}`;
+        }
+        next();
+      });
+    },
+  };
+}
+
 // Demo build config - outputs to demo folder for GitHub Pages
 export default defineConfig({
-  plugins: [vue(), vuetify({ autoImport: true }), renameHtmlPlugin()],
+  plugins: [vue(), vuetify({ autoImport: true }), renameHtmlPlugin(), serveDemoHtmlPlugin()],
   base: "/esp32-photoframe/",
   publicDir: resolve(__dirname, "../demo"), // Serve demo folder as public (for sample.jpg, manifests)
   build: {
