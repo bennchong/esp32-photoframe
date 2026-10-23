@@ -61,7 +61,7 @@ def find_available_port(start_port=8001, max_attempts=10):
     return None
 
 
-def build_firmware(project_root, board="waveshare_photopainter_73"):
+def build_firmware(project_root, board="frameway_73"):
     """Build firmware using idf.py build."""
 
     print(f"\nBuilding firmware for {board}...")
@@ -118,8 +118,8 @@ def download_stable_firmware(demo_dir, project_root):
         latest_tag = result.stdout.strip()
         print(f"  Latest release: {latest_tag}")
 
-        # Get repository info (always aitjcize/esp32-photoframe)
-        repo_path = "aitjcize/esp32-photoframe"
+        # Firmware releases are published to a separate public repository
+        repo_path = "bennchong/frameway-firmware"
 
         for board in BOARDS:
             board_dir = demo_dir / board
@@ -135,22 +135,6 @@ def download_stable_firmware(demo_dir, project_root):
                 print(f"  ✓ Downloaded stable firmware for {board} ({latest_tag})")
                 success_count += 1
             except Exception as e:
-                # Fallback for waveshare backward compatibility (before board names were in filename)
-                if board == "waveshare_photopainter_73":
-                    try:
-                        print(
-                            f"  ⚠ Warning: Could not download board-specific firmware, trying legacy filename..."
-                        )
-                        legacy_url = f"https://github.com/{repo_path}/releases/download/{latest_tag}/photoframe-firmware-merged.bin"
-                        urllib.request.urlretrieve(legacy_url, output_file)
-                        print(
-                            f"  ✓ Downloaded legacy stable firmware for {board} ({latest_tag})"
-                        )
-                        success_count += 1
-                        continue
-                    except Exception as e2:
-                        pass
-
                 print(
                     f"  ⚠ Warning: Could not download stable firmware for {board}: {e}"
                 )
@@ -420,9 +404,9 @@ def main():
     )
     parser.add_argument(
         "--board",
-        default="waveshare_photopainter_73",
+        default="frameway_73",
         choices=ALL_BOARDS + ["all"],
-        help="Board type to build (default: waveshare_photopainter_73)",
+        help="Board type to build (default: frameway_73)",
     )
 
     args = parser.parse_args()

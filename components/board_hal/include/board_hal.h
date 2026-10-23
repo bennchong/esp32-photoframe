@@ -24,8 +24,8 @@ typedef enum {
     BOARD_TYPE_UNKNOWN
 } board_type_t;
 
-#ifdef CONFIG_BOARD_DRIVER_WAVESHARE_PHOTOPAINTER_73
-#include "board_waveshare_photopainter_73.h"
+#ifdef CONFIG_BOARD_DRIVER_FRAMEWAY_73
+#include "board_frameway_73.h"
 #elif defined(CONFIG_BOARD_DRIVER_SEEEDSTUDIO_XIAO_EE02)
 #include "board_seeedstudio_xiao_ee02.h"
 #elif defined(CONFIG_BOARD_DRIVER_SEEEDSTUDIO_XIAO_EE04)

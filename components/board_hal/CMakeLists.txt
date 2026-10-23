@@ -13,8 +13,8 @@ set(PRIV_REQS
     sensor_driver_shtc3
 )
 
-if(CONFIG_BOARD_DRIVER_WAVESHARE_PHOTOPAINTER_73)
-    list(APPEND SRCS "src/driver_waveshare_photopainter_73.c")
+if(CONFIG_BOARD_DRIVER_FRAMEWAY_73)
+    list(APPEND SRCS "src/driver_frameway_73.c")
 elseif(CONFIG_BOARD_DRIVER_SEEEDSTUDIO_XIAO_EE02)
     list(APPEND SRCS "src/driver_seeedstudio_xiao_ee02.c")
 elseif(CONFIG_BOARD_DRIVER_SEEEDSTUDIO_XIAO_EE04)

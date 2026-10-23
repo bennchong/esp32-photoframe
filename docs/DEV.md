@@ -32,7 +32,7 @@ npm install
 cd ..
 
 # Build for Waveshare PhotoPainter (7.3" 7-color e-paper)
-./build.py --board waveshare_photopainter_73
+./build.py --board frameway_73
 
 # Build for Seeed Studio XIAO EE02 (13.3" e-paper)
 ./build.py --board seeedstudio_xiao_ee02
@@ -41,7 +41,7 @@ cd ..
 ./build.py --board seeedstudio_xiao_ee04
 
 # Clean build (optional)
-./build.py --board waveshare_photopainter_73 --fullclean
+./build.py --board frameway_73 --fullclean
 ```
 
 The script automatically:

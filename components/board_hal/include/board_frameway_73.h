@@ -1,10 +1,10 @@
-#ifndef BOARD_WAVESHARE_PHOTOPAINTER_73_H
-#define BOARD_WAVESHARE_PHOTOPAINTER_73_H
+#ifndef BOARD_FRAMEWAY_73_H
+#define BOARD_FRAMEWAY_73_H
 
 #include "driver/gpio.h"
 
 // Board Info
-#define BOARD_HAL_NAME "waveshare_photopainter_73"
+#define BOARD_HAL_NAME "frameway_73"
 #define BOARD_HAL_TYPE BOARD_TYPE_WAVESHARE_PHOTOPAINTER
 
 // Button Definitions
@@ -45,4 +45,4 @@
 // Display Configuration
 #define BOARD_HAL_DISPLAY_ROTATION_DEG 180
 
-#endif  // BOARD_WAVESHARE_PHOTOPAINTER_73_H
+#endif  // BOARD_FRAMEWAY_73_H

@@ -2,11 +2,11 @@ menu "Board Configuration"
 
     choice BOARD_TYPE
         prompt "Board Driver"
-        default BOARD_DRIVER_WAVESHARE_PHOTOPAINTER_73
+        default BOARD_DRIVER_FRAMEWAY_73
         help
             Select the power management driver to use.
 
-        config BOARD_DRIVER_WAVESHARE_PHOTOPAINTER_73
+        config BOARD_DRIVER_FRAMEWAY_73
             bool "WaveShare PhotoPainter 7.3in"
             select PMIC_DRIVER_AXP2101
             select SDCARD_DRIVER_SDIO

@@ -14,7 +14,7 @@ settingsStore.deviceSettings.displayOrientation = "landscape";
 const stableVersion = ref("—");
 const devVersion = ref("loading…");
 const selectedVersion = ref("stable");
-const selectedBoard = ref("waveshare_photopainter_73");
+const selectedBoard = ref("frameway_73");
 const baseUrl = import.meta.env.BASE_URL;
 
 const supportedBoards = boardsData.map((b) => ({

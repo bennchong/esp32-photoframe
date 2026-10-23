@@ -9,6 +9,10 @@ on:
     branches: [ main, dev ]
   workflow_dispatch:
 
+env:
+  # Public repository that hosts firmware releases (web flasher stable builds and OTA updates)
+  FIRMWARE_REPO: bennchong/frameway-firmware
+
 jobs:
   ci:
     uses: ./.github/workflows/ci.yml
@@ -25,10 +29,10 @@ jobs:
     strategy:
       matrix:
         # Other boards temporarily disabled to save GitHub Actions minutes
-        board: [waveshare_photopainter_73]
-        # board: [waveshare_photopainter_73, seeedstudio_xiao_ee02, seeedstudio_reterminal_e1002, seeedstudio_xiao_ee04]
+        board: [frameway_73]
+        # board: [frameway_73, seeedstudio_xiao_ee02, seeedstudio_reterminal_e1002, seeedstudio_xiao_ee04]
         include:
-          - board: waveshare_photopainter_73
+          - board: frameway_73
             flash_size: 16MB
           # - board: seeedstudio_xiao_ee02
           #   flash_size: 16MB
@@ -119,12 +123,15 @@ jobs:
         merge-multiple: true
 
     - name: Create Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
+        # Publish to the firmware repository; needs a token with Contents: write on it
+        repository: ${{ env.FIRMWARE_REPO }}
+        token: ${{ secrets.FIRMWARE_REPO_TOKEN }}
         draft: true
         files: |
-          firmware-artifacts/photoframe-firmware-waveshare_photopainter_73-merged.bin
-          firmware-artifacts/esp32-photoframe-waveshare_photopainter_73.bin
+          firmware-artifacts/photoframe-firmware-frameway_73-merged.bin
+          firmware-artifacts/esp32-photoframe-frameway_73.bin
           firmware-artifacts/photoframe-firmware-seeedstudio_xiao_ee02-merged.bin
           firmware-artifacts/esp32-photoframe-seeedstudio_xiao_ee02.bin
           firmware-artifacts/photoframe-firmware-seeedstudio_reterminal_e1002-merged.bin
@@ -144,7 +151,7 @@ jobs:
 
           ### Manually
           Choose the appropriate merged binary for your board:
-          - `photoframe-firmware-waveshare_photopainter_73-merged.bin`: For Waveshare 7.3" 7-color e-paper
+          - `photoframe-firmware-frameway_73-merged.bin`: For Waveshare 7.3" 7-color e-paper
           - `photoframe-firmware-seeedstudio_xiao_ee02-merged.bin`: For Seeed XIAO EE02
           - `photoframe-firmware-seeedstudio_reterminal_e1002-merged.bin`: For Seeed reTerminal E1002
           - `photoframe-firmware-seeedstudio_xiao_ee04-merged.bin`: For Seeed XIAO EE04
@@ -228,14 +235,14 @@ jobs:
             STABLE_TAG="$HEAD_TAG"
           else
             # Fall back to latest published release
-            STABLE_TAG=$(gh release view --json tagName -q '.tagName' 2>/dev/null || echo "")
+            STABLE_TAG=$(gh release view --repo "$FIRMWARE_REPO" --json tagName -q '.tagName' 2>/dev/null || echo "")
           fi
         fi
         echo "Stable version: ${STABLE_TAG:-none}"
 
         # Other boards temporarily disabled to save GitHub Actions minutes (must match the build matrix)
-        BOARDS="waveshare_photopainter_73"
-        # BOARDS="waveshare_photopainter_73 seeedstudio_xiao_ee02 seeedstudio_reterminal_e1002 seeedstudio_xiao_ee04"
+        BOARDS="frameway_73"
+        # BOARDS="frameway_73 seeedstudio_xiao_ee02 seeedstudio_reterminal_e1002 seeedstudio_xiao_ee04"
 
         for board in $BOARDS; do
           mkdir -p "demo/$board"
@@ -249,11 +256,8 @@ jobs:
           elif [[ -n "$STABLE_TAG" ]]; then
             # For main branch: download from latest published release using gh (authenticated)
             echo "Downloading stable release ${STABLE_TAG} firmware for $board..."
-            if gh release download "$STABLE_TAG" --pattern "photoframe-firmware-$board-merged.bin" --dir "demo/$board" --clobber; then
+            if gh release download "$STABLE_TAG" --repo "$FIRMWARE_REPO" --pattern "photoframe-firmware-$board-merged.bin" --dir "demo/$board" --clobber; then
               echo "Successfully downloaded stable firmware ${STABLE_TAG} for $board"
-            elif [[ "$board" == "waveshare_photopainter_73" ]] && gh release download "$STABLE_TAG" --pattern "photoframe-firmware-merged.bin" --dir "demo/$board" --clobber; then
-              echo "Successfully downloaded legacy stable firmware for $board"
-              mv "demo/$board/photoframe-firmware-merged.bin" "demo/$board/photoframe-firmware-$board-merged.bin"
             else
               echo "Warning: Could not download stable firmware for $board, using dev build as fallback"
               cp "demo/$board/photoframe-firmware-$board-dev.bin" "demo/$board/photoframe-firmware-$board-merged.bin"
@@ -269,8 +273,8 @@ jobs:
         done
 
         # Link a default manifest at the root of demo for backward compatibility or default view
-        cp demo/waveshare_photopainter_73/manifest.json demo/
-        cp demo/waveshare_photopainter_73/manifest-dev.json demo/
+        cp demo/frameway_73/manifest.json demo/
+        cp demo/frameway_73/manifest-dev.json demo/
       env:
         GH_TOKEN: ${{ github.token }}
 

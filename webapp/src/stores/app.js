@@ -25,7 +25,7 @@ export const useAppStore = defineStore("app", () => {
     compile_time: "",
     compile_date: "",
     idf_version: "",
-    board_name: "waveshare_photopainter_73",
+    board_name: "frameway_73",
   });
   const loading = ref({
     albums: false,

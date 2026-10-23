@@ -95,7 +95,7 @@ def main():
     parser.add_argument(
         "--board",
         choices=BOARDS,
-        default="waveshare_photopainter_73",
+        default="frameway_73",
         help="Board type to build",
     )
     parser.add_argument(
