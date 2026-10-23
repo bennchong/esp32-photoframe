@@ -1,5 +1,6 @@
 #include "http_server.h"
 
+#include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <stdio.h>
@@ -1769,9 +1770,11 @@ static esp_err_t lta_test_handler(httpd_req_t *req)
     }
 
     char account_key[LTA_ACCOUNT_KEY_MAX_LEN] = {0};
+    const char *key_source = "request";
 
     if (req->content_len > 0) {
         if (req->content_len > LTA_TEST_BODY_MAX) {
+            ESP_LOGE(TAG, "LTA test request body too large: %zu bytes", req->content_len);
             httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Request body too large");
             return ESP_FAIL;
         }
@@ -1779,6 +1782,7 @@ static esp_err_t lta_test_handler(httpd_req_t *req)
         char buf[LTA_TEST_BODY_MAX + 1];
         int ret = httpd_req_recv(req, buf, MIN(req->content_len, sizeof(buf) - 1));
         if (ret <= 0) {
+            ESP_LOGE(TAG, "Failed to read LTA test request");
             httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Failed to read request");
             return ESP_FAIL;
         }
@@ -1786,6 +1790,7 @@ static esp_err_t lta_test_handler(httpd_req_t *req)
 
         cJSON *root = cJSON_Parse(buf);
         if (!root) {
+            ESP_LOGE(TAG, "Failed to parse LTA test request JSON");
             httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
             return ESP_FAIL;
         }
@@ -1804,6 +1809,7 @@ static esp_err_t lta_test_handler(httpd_req_t *req)
         if (stored_key && stored_key[0] != '\0') {
             strncpy(account_key, stored_key, LTA_ACCOUNT_KEY_MAX_LEN - 1);
             account_key[LTA_ACCOUNT_KEY_MAX_LEN - 1] = '\0';
+            key_source = "stored config";
         }
     }
 
@@ -1813,9 +1819,18 @@ static esp_err_t lta_test_handler(httpd_req_t *req)
     char message[128] = {0};
 
     if (account_key[0] == '\0') {
+        ESP_LOGW(TAG, "LTA AccountKey test: no key in request and none stored");
         snprintf(message, sizeof(message), "LTA AccountKey is required");
         httpd_resp_set_status(req, HTTPD_400);
     } else {
+        // Log the key's length and source, never the key itself
+        size_t key_len = strlen(account_key);
+        ESP_LOGI(TAG, "Testing LTA AccountKey from %s (%zu chars)...", key_source, key_len);
+        if (isspace((unsigned char) account_key[0]) ||
+            isspace((unsigned char) account_key[key_len - 1])) {
+            ESP_LOGW(TAG, "LTA AccountKey has leading or trailing whitespace");
+        }
+
         esp_http_client_config_t config = {
             .url = LTA_TEST_URL,
             .method = HTTP_METHOD_GET,
@@ -1826,6 +1841,7 @@ static esp_err_t lta_test_handler(httpd_req_t *req)
 
         esp_http_client_handle_t client = esp_http_client_init(&config);
         if (!client) {
+            ESP_LOGE(TAG, "Failed to initialize HTTP client");
             http_err = ESP_FAIL;
         } else {
             bool opened = false;
@@ -1837,6 +1853,14 @@ static esp_err_t lta_test_handler(httpd_req_t *req)
                 opened = true;
                 esp_http_client_fetch_headers(client);
                 status_code = esp_http_client_get_status_code(client);
+                if (status_code == 200) {
+                    ESP_LOGI(TAG, "LTA AccountKey is valid");
+                } else {
+                    lta_log_error_response(client, status_code);
+                }
+            } else {
+                ESP_LOGE(TAG, "Failed to open HTTP connection to LTA: %s (errno %d)",
+                         esp_err_to_name(http_err), esp_http_client_get_errno(client));
             }
 
             if (opened) {
