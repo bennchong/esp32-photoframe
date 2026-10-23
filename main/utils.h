@@ -11,6 +11,7 @@
 
 #include "cJSON.h"
 #include "esp_err.h"
+#include "esp_http_client.h"
 
 // Apply config values from a parsed cJSON object.
 // Handles all config fields including side effects (WiFi, mDNS, timers, etc.).
@@ -91,5 +92,9 @@ const char *get_setup_ap_ssid(void);
 esp_err_t fetch_lta_bus_arrivals(const char *bus_stop_code, const char *account_key,
                                  cJSON **response_out, int *http_status_out, char *err_out,
                                  size_t err_out_len);
+
+// Log a non-200 LTA reply: the status code and the start of the response body.
+// Call after esp_http_client_fetch_headers(); consumes part of the body.
+void lta_log_error_response(esp_http_client_handle_t client, int status_code);
 
 #endif
