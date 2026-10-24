@@ -68,6 +68,10 @@ typedef enum {
 #define BUS_REFRESH_INTERVAL_SEC 120
 #define BUS_WINDOW_LEAD_SEC 60
 
+// Bus window until the user sets one: the morning commute, 07:00-09:00 (minutes of the day)
+#define DEFAULT_BUS_TIME_START (7 * 60)
+#define DEFAULT_BUS_TIME_END (9 * 60)
+
 // WiFi
 #define NVS_WIFI_SSID_KEY "wifi_ssid"
 #define NVS_WIFI_PASS_KEY "wifi_pass"

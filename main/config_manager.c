@@ -52,8 +52,8 @@ static char bus_stop_number[BUS_STOP_NUMBER_MAX_LEN] = {0};
 static char bus_services[BUS_SERVICES_MAX_LEN] = {0};
 static char bus_stop_number_2[BUS_STOP_NUMBER_MAX_LEN] = {0};
 static char bus_services_2[BUS_SERVICES_MAX_LEN] = {0};
-static int bus_time_start = 0;
-static int bus_time_end = 1439;
+static int bus_time_start = DEFAULT_BUS_TIME_START;
+static int bus_time_end = DEFAULT_BUS_TIME_END;
 
 // AI API Keys
 static char openai_api_key[AI_API_KEY_MAX_LEN] = {0};
@@ -292,14 +292,14 @@ esp_err_t config_manager_init(void)
             ESP_LOGI(TAG, "Loaded bus stop 2 services from NVS: %s", bus_services_2);
         }
 
-        int32_t stored_bus_time_start = 0;
+        int32_t stored_bus_time_start = DEFAULT_BUS_TIME_START;
         if (nvs_get_i32(nvs_handle, NVS_BUS_TIME_START_KEY, &stored_bus_time_start) == ESP_OK) {
             bus_time_start = stored_bus_time_start;
             ESP_LOGI(TAG, "Loaded bus time start from NVS: %d minutes (%02d:%02d)", bus_time_start,
                      bus_time_start / 60, bus_time_start % 60);
         }
 
-        int32_t stored_bus_time_end = 1439;
+        int32_t stored_bus_time_end = DEFAULT_BUS_TIME_END;
         if (nvs_get_i32(nvs_handle, NVS_BUS_TIME_END_KEY, &stored_bus_time_end) == ESP_OK) {
             bus_time_end = stored_bus_time_end;
             ESP_LOGI(TAG, "Loaded bus time end from NVS: %d minutes (%02d:%02d)", bus_time_end,
