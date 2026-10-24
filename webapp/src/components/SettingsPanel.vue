@@ -179,6 +179,131 @@ const busStopFields = [
   },
 ];
 
+// Bus timing window, as "HH:MM" strings. An end of "24:00" (stored as minute 1440) runs to the
+// end of the day, which 23:59 can't express since the window excludes its end minute.
+const BUS_REFRESH_MINUTES = 2; // BUS_REFRESH_INTERVAL_SEC in main/config.h
+
+const busTimePresets = [
+  { label: "Morning commute", start: "07:00", end: "09:00" },
+  { label: "Evening commute", start: "17:00", end: "19:30" },
+  { label: "All day", start: "00:00", end: "24:00" },
+];
+
+const busTimeFields = [
+  { field: "busTimeStart", label: "From" },
+  { field: "busTimeEnd", label: "To", allowEndOfDay: true },
+];
+
+const padTime = (value) => String(value).padStart(2, "0");
+
+function splitTime(time) {
+  const [hours, minutes] = time.split(":").map(Number);
+  return { hours, minutes };
+}
+
+function toMinutes(time) {
+  const { hours, minutes } = splitTime(time);
+  return hours * 60 + minutes;
+}
+
+// Mirrors is_minute_in_window() in main/testable_utils.c
+function isMinuteInWindow(minute, start, end) {
+  return start > end ? minute >= start || minute < end : minute >= start && minute < end;
+}
+
+function formatDuration(minutes) {
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hours === 0) return `${mins} min`;
+  return mins === 0 ? `${hours} h` : `${hours} h ${mins} min`;
+}
+
+function busHourItems(time) {
+  const hours = Array.from({ length: 24 }, (_, hour) => ({ title: padTime(hour), value: hour }));
+  return time.allowEndOfDay ? [...hours, { title: "24", value: 24 }] : hours;
+}
+
+// 15-minute steps, plus the current minute when it's off the grid (e.g. an older 23:59 setting)
+function busMinuteItems(time) {
+  const current = splitTime(settingsStore.deviceSettings[time.field]).minutes;
+  const minutes = [0, 15, 30, 45];
+  if (!minutes.includes(current)) {
+    minutes.push(current);
+    minutes.sort((a, b) => a - b);
+  }
+  return minutes.map((minute) => ({ title: padTime(minute), value: minute }));
+}
+
+function getBusTimePart(time, part) {
+  return splitTime(settingsStore.deviceSettings[time.field])[part];
+}
+
+function setBusTimePart(time, part, value) {
+  const parts = splitTime(settingsStore.deviceSettings[time.field]);
+  parts[part] = value;
+  if (parts.hours === 24) {
+    parts.minutes = 0;
+  }
+  settingsStore.deviceSettings[time.field] = `${padTime(parts.hours)}:${padTime(parts.minutes)}`;
+}
+
+function isBusPresetActive(preset) {
+  const { busTimeStart, busTimeEnd } = settingsStore.deviceSettings;
+  return busTimeStart === preset.start && busTimeEnd === preset.end;
+}
+
+function applyBusPreset(preset) {
+  settingsStore.deviceSettings.busTimeStart = preset.start;
+  settingsStore.deviceSettings.busTimeEnd = preset.end;
+}
+
+const busWindowSummary = computed(() => {
+  const settings = settingsStore.deviceSettings;
+  const start = toMinutes(settings.busTimeStart);
+  const end = toMinutes(settings.busTimeEnd);
+
+  if (start === end) {
+    return {
+      type: "warning",
+      text: "From and To are the same, so bus arrivals will never show.",
+    };
+  }
+
+  const sleepStart = toMinutes(settings.sleepScheduleStart);
+  const sleepEnd = toMinutes(settings.sleepScheduleEnd);
+  let shown = 0;
+  let asleep = 0;
+  for (let minute = 0; minute < 24 * 60; minute++) {
+    if (!isMinuteInWindow(minute, start, end)) continue;
+    if (settings.sleepScheduleEnabled && isMinuteInWindow(minute, sleepStart, sleepEnd)) {
+      asleep++;
+    } else {
+      shown++;
+    }
+  }
+
+  if (shown === 0) {
+    return {
+      type: "warning",
+      text: "The sleep schedule covers this whole range, so bus arrivals will never show.",
+    };
+  }
+
+  const endLabel = settings.busTimeEnd === "24:00" ? "midnight" : settings.busTimeEnd;
+  const range =
+    start === 0 && end === 24 * 60 ? "all day" : `from ${settings.busTimeStart} to ${endLabel}`;
+  const crossesMidnight = start > end ? " (crosses midnight)" : "";
+  const sleepNote =
+    asleep > 0 ? ` after the sleep schedule hides ${formatDuration(asleep)} of it` : "";
+  const text =
+    `Shows bus arrivals instead of photos ${range}${crossesMidnight}, every day. ` +
+    `That's ${formatDuration(shown)} a day${sleepNote}, refreshing every ` +
+    `${BUS_REFRESH_MINUTES} minutes (about ${Math.round(shown / BUS_REFRESH_MINUTES)} screen ` +
+    "refreshes). On battery, keep the range short.";
+
+  return { type: asleep > 0 ? "warning" : "info", text };
+});
+
 const busStopNumberRule = (value) =>
   !value?.trim() || /^\d{5}$/.test(value.trim()) || "Enter the 5-digit stop number";
 const busServicesRule = (value) =>
@@ -810,31 +935,59 @@ async function performFactoryReset() {
                     Use Google Maps to locate a nearby bus stop, then enter its stop number above.
                   </span>
                 </div>
-                <v-row>
-                  <v-col cols="12" sm="6" md="3">
-                    <v-text-field
-                      v-model="settingsStore.deviceSettings.busTimeStart"
-                      label="Show Bus Timings From"
-                      type="time"
-                      variant="outlined"
-                      hide-details
-                      :disabled="!settingsStore.deviceSettings.busEnabled"
-                    />
-                  </v-col>
-                  <v-col cols="12" sm="6" md="3">
-                    <v-text-field
-                      v-model="settingsStore.deviceSettings.busTimeEnd"
-                      label="Show Bus Timings To"
-                      type="time"
-                      variant="outlined"
-                      hide-details
-                      :disabled="!settingsStore.deviceSettings.busEnabled"
-                    />
+                <div class="text-subtitle-2 mb-3">Show bus timings</div>
+                <div class="d-flex flex-wrap ga-2 mb-4">
+                  <v-chip
+                    v-for="preset in busTimePresets"
+                    :key="preset.label"
+                    :color="isBusPresetActive(preset) ? 'primary' : undefined"
+                    :variant="isBusPresetActive(preset) ? 'flat' : 'outlined'"
+                    :disabled="!settingsStore.deviceSettings.busEnabled"
+                    @click="applyBusPreset(preset)"
+                  >
+                    {{ preset.label }}
+                    <span v-if="preset.end !== '24:00'" class="ml-1 opacity-70">
+                      {{ preset.start }}–{{ preset.end }}
+                    </span>
+                  </v-chip>
+                </div>
+                <v-row dense>
+                  <v-col v-for="time in busTimeFields" :key="time.field" cols="12" sm="6" md="4">
+                    <div class="d-flex align-center ga-2">
+                      <v-select
+                        :model-value="getBusTimePart(time, 'hours')"
+                        :items="busHourItems(time)"
+                        :label="time.label"
+                        variant="outlined"
+                        density="compact"
+                        hide-details
+                        :disabled="!settingsStore.deviceSettings.busEnabled"
+                        @update:model-value="setBusTimePart(time, 'hours', $event)"
+                      />
+                      <span>:</span>
+                      <v-select
+                        :model-value="getBusTimePart(time, 'minutes')"
+                        :items="busMinuteItems(time)"
+                        label="Minute"
+                        variant="outlined"
+                        density="compact"
+                        hide-details
+                        :disabled="
+                          !settingsStore.deviceSettings.busEnabled ||
+                          getBusTimePart(time, 'hours') === 24
+                        "
+                        @update:model-value="setBusTimePart(time, 'minutes', $event)"
+                      />
+                    </div>
                   </v-col>
                 </v-row>
-                <v-alert type="info" variant="tonal" density="compact" class="mt-4">
-                  The frame shows bus arrivals instead of photos during this time range, refreshing
-                  every 2 minutes. On battery, keep the range short.
+                <v-alert
+                  :type="busWindowSummary.type"
+                  variant="tonal"
+                  density="compact"
+                  class="mt-4"
+                >
+                  {{ busWindowSummary.text }}
                 </v-alert>
               </v-card-text>
             </v-card>
