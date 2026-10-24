@@ -29,6 +29,7 @@ typedef enum {
 #define HTTP_ETAG_MAX_LEN 128
 #define LTA_ACCOUNT_KEY_MAX_LEN 256
 #define BUS_STOP_NUMBER_MAX_LEN 16
+#define BUS_STOP_NAME_MAX_LEN 48
 #define BUS_SERVICES_MAX_LEN 128
 
 #define DEFAULT_DEVICE_NAME "PhotoFrame"
@@ -71,6 +72,10 @@ typedef enum {
 // Bus window until the user sets one: the morning commute, 07:00-09:00 (minutes of the day)
 #define DEFAULT_BUS_TIME_START (7 * 60)
 #define DEFAULT_BUS_TIME_END (9 * 60)
+
+// Arrival times count from when the bus screen finishes refreshing. This is the first guess at
+// how long that takes after the times are worked out, until a refresh has been measured.
+#define BUS_DISPLAY_LATENCY_SEC 20
 
 // WiFi
 #define NVS_WIFI_SSID_KEY "wifi_ssid"
@@ -117,6 +122,8 @@ typedef enum {
 #define NVS_BUS_SERVICES_2_KEY "bus_svcs2"
 #define NVS_BUS_TIME_START_KEY "bus_time_s"
 #define NVS_BUS_TIME_END_KEY "bus_time_e"
+#define NVS_BUS_STOP_NAME_KEY "bus_name"  // Cached LTA stop names, keyed by stop number
+#define NVS_BUS_STOP_NAME_2_KEY "bus_name2"
 
 // Power
 #define NVS_DEEP_SLEEP_KEY "deep_sleep"

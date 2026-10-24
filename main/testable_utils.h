@@ -35,6 +35,11 @@ int parse_bus_service_list(const char *csv, char services[][BUS_SERVICE_NO_LEN],
 // Returns -1 when the timestamp is empty or malformed.
 int lta_minutes_until(const char *estimated_arrival, time_t now);
 
+// Find a stop in one page of LTA's BusStops response (the raw JSON) and copy its Description,
+// e.g. "Opp Blk 123", into name, truncating to fit. Returns false when the page doesn't list it.
+bool lta_find_bus_stop_name(const char *json, const char *bus_stop_code, char *name,
+                            size_t name_len);
+
 // Whether minute_of_day is in [start_minutes, end_minutes), wrapping past midnight when
 // start_minutes > end_minutes. An empty window (start == end) contains nothing.
 bool is_minute_in_window(int minute_of_day, int start_minutes, int end_minutes);
