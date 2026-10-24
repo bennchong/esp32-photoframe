@@ -135,8 +135,8 @@ Get current device configuration.
   "bus_services": "",
   "bus_stop_number_2": "",
   "bus_services_2": "",
-  "bus_time_start": 0,
-  "bus_time_end": 1439,
+  "bus_time_start": 420,
+  "bus_time_end": 540,
   "openai_api_key": "",
   "google_api_key": "",
   "deep_sleep_enabled": true
@@ -172,8 +172,10 @@ Get current device configuration.
   the first 5 at the stop)
 - `bus_stop_number_2`: Optional second bus stop number
 - `bus_services_2`: Service list for the second stop, same format as `bus_services`
-- `bus_time_start`: Start time in minutes since midnight for bus display window
-- `bus_time_end`: End time in minutes since midnight for bus display window
+- `bus_time_start`: Start time in minutes since midnight for bus display window (default 420, 07:00)
+- `bus_time_end`: End time in minutes since midnight for bus display window, not included (default
+  540, 09:00). 1440 runs to the end of the day; a window may cross midnight, and equal start and end
+  times never show buses
 - `openai_api_key`/`google_api_key`: AI API keys for client-side generation
 - `deep_sleep_enabled`: Enable deep sleep between rotations
 

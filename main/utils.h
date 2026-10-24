@@ -93,6 +93,13 @@ esp_err_t fetch_lta_bus_arrivals(const char *bus_stop_code, const char *account_
                                  cJSON **response_out, int *http_status_out, char *err_out,
                                  size_t err_out_len);
 
+// Look up a bus stop's name (LTA's Description, e.g. "Opp Blk 123") in LTA Data Mall's stop list,
+// using the stored config account key. This pages through every stop, about 11 requests, so cache
+// the result. Returns ESP_ERR_NOT_FOUND when LTA doesn't list the stop.
+// err_out (optional) receives a human-readable error message.
+esp_err_t fetch_lta_bus_stop_name(const char *bus_stop_code, char *name, size_t name_len,
+                                  char *err_out, size_t err_out_len);
+
 // Log a non-200 LTA reply: the status code and the start of the response body.
 // Call after esp_http_client_fetch_headers(); consumes part of the body.
 void lta_log_error_response(esp_http_client_handle_t client, int status_code);

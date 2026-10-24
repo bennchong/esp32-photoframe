@@ -32,8 +32,12 @@ static const char *TAG = "utils";
 
 #define LTA_BUS_ARRIVAL_URL \
     "https://datamall2.mytransport.sg/ltaodataservice/v3/BusArrival?BusStopCode=%s"
-#define LTA_BUS_ARRIVAL_TIMEOUT_MS 10000
 #define LTA_BUS_ARRIVAL_MAX_RESPONSE 32768
+#define LTA_BUS_STOPS_URL "https://datamall2.mytransport.sg/ltaodataservice/BusStops?$skip=%d"
+#define LTA_BUS_STOPS_PAGE_SIZE 500
+#define LTA_BUS_STOPS_MAX_PAGES 20         // Singapore has about 5,200 stops, so 11 pages
+#define LTA_BUS_STOPS_MAX_RESPONSE 196608  // A page of 500 stops is roughly 70 KB
+#define LTA_HTTP_TIMEOUT_MS 10000
 #define LTA_ERROR_BODY_LOG_MAX 256
 
 // Last image fetch error (transient, not persisted)
@@ -402,27 +406,16 @@ void lta_log_error_response(esp_http_client_handle_t client, int status_code)
     }
 }
 
-esp_err_t fetch_lta_bus_arrivals(const char *bus_stop_code, const char *account_key,
-                                 cJSON **response_out, int *http_status_out, char *err_out,
-                                 size_t err_out_len)
+// GET an LTA DataMall URL. On success *body_out holds the NUL-terminated response, which the
+// caller frees. account_key may be NULL/empty to use the stored config account key.
+static esp_err_t lta_get(const char *url, const char *account_key, int max_response,
+                         char **body_out, int *body_len_out, int *http_status_out, char *err_out,
+                         size_t err_out_len)
 {
-    if (response_out == NULL) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    *response_out = NULL;
+    *body_out = NULL;
+    *body_len_out = 0;
     if (http_status_out) {
         *http_status_out = 0;
-    }
-    if (err_out && err_out_len > 0) {
-        err_out[0] = '\0';
-    }
-
-    if (!bus_stop_code || bus_stop_code[0] == '\0') {
-        if (err_out && err_out_len > 0) {
-            snprintf(err_out, err_out_len, "Bus stop code is required");
-        }
-        return ESP_ERR_INVALID_ARG;
     }
 
     const char *effective_key = account_key;
@@ -437,21 +430,10 @@ esp_err_t fetch_lta_bus_arrivals(const char *bus_stop_code, const char *account_
         return ESP_ERR_INVALID_ARG;
     }
 
-    char url[256];
-    int url_len = snprintf(url, sizeof(url), LTA_BUS_ARRIVAL_URL, bus_stop_code);
-    if (url_len < 0 || url_len >= (int) sizeof(url)) {
-        if (err_out && err_out_len > 0) {
-            snprintf(err_out, err_out_len, "Bus stop code is too long");
-        }
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    ESP_LOGI(TAG, "Fetching LTA bus arrivals for stop %s", bus_stop_code);
-
     esp_http_client_config_t config = {
         .url = url,
         .method = HTTP_METHOD_GET,
-        .timeout_ms = LTA_BUS_ARRIVAL_TIMEOUT_MS,
+        .timeout_ms = LTA_HTTP_TIMEOUT_MS,
         .crt_bundle_attach = esp_crt_bundle_attach,
         .user_agent = "ESP32-PhotoFrame/1.0",
     };
@@ -500,7 +482,7 @@ esp_err_t fetch_lta_bus_arrivals(const char *bus_stop_code, const char *account_
         goto cleanup;
     }
 
-    if (content_length > LTA_BUS_ARRIVAL_MAX_RESPONSE) {
+    if (content_length > max_response) {
         ESP_LOGE(TAG, "LTA response too large: %d bytes", content_length);
         if (err_out && err_out_len > 0) {
             snprintf(err_out, err_out_len, "LTA response too large");
@@ -509,7 +491,7 @@ esp_err_t fetch_lta_bus_arrivals(const char *bus_stop_code, const char *account_
         goto cleanup;
     }
 
-    response_buffer = malloc(LTA_BUS_ARRIVAL_MAX_RESPONSE + 1);
+    response_buffer = malloc(max_response + 1);
     if (!response_buffer) {
         ESP_LOGE(TAG, "Failed to allocate memory for LTA response");
         if (err_out && err_out_len > 0) {
@@ -521,9 +503,9 @@ esp_err_t fetch_lta_bus_arrivals(const char *bus_stop_code, const char *account_
 
     // Read until the stream ends: chunked replies carry no Content-Length
     int response_len = 0;
-    while (response_len < LTA_BUS_ARRIVAL_MAX_RESPONSE) {
+    while (response_len < max_response) {
         int read_len = esp_http_client_read(client, response_buffer + response_len,
-                                            LTA_BUS_ARRIVAL_MAX_RESPONSE - response_len);
+                                            max_response - response_len);
         if (read_len < 0) {
             response_len = -1;
             break;
@@ -543,9 +525,8 @@ esp_err_t fetch_lta_bus_arrivals(const char *bus_stop_code, const char *account_
         goto cleanup;
     }
 
-    if (response_len == LTA_BUS_ARRIVAL_MAX_RESPONSE &&
-        !esp_http_client_is_complete_data_received(client)) {
-        ESP_LOGE(TAG, "LTA response exceeds %d bytes", LTA_BUS_ARRIVAL_MAX_RESPONSE);
+    if (response_len == max_response && !esp_http_client_is_complete_data_received(client)) {
+        ESP_LOGE(TAG, "LTA response exceeds %d bytes", max_response);
         if (err_out && err_out_len > 0) {
             snprintf(err_out, err_out_len, "LTA response too large");
         }
@@ -554,19 +535,9 @@ esp_err_t fetch_lta_bus_arrivals(const char *bus_stop_code, const char *account_
     }
 
     response_buffer[response_len] = '\0';
-
-    cJSON *json = cJSON_Parse(response_buffer);
-    if (!json) {
-        ESP_LOGE(TAG, "Failed to parse LTA response JSON");
-        if (err_out && err_out_len > 0) {
-            snprintf(err_out, err_out_len, "Failed to parse LTA response JSON");
-        }
-        err = ESP_FAIL;
-        goto cleanup;
-    }
-
-    ESP_LOGI(TAG, "LTA bus arrivals for stop %s: %d bytes", bus_stop_code, response_len);
-    *response_out = json;
+    *body_out = response_buffer;
+    *body_len_out = response_len;
+    response_buffer = NULL;
     err = ESP_OK;
 
 cleanup:
@@ -578,6 +549,117 @@ cleanup:
     }
     esp_http_client_cleanup(client);
     return err;
+}
+
+esp_err_t fetch_lta_bus_arrivals(const char *bus_stop_code, const char *account_key,
+                                 cJSON **response_out, int *http_status_out, char *err_out,
+                                 size_t err_out_len)
+{
+    if (response_out == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    *response_out = NULL;
+    if (http_status_out) {
+        *http_status_out = 0;
+    }
+    if (err_out && err_out_len > 0) {
+        err_out[0] = '\0';
+    }
+
+    if (!bus_stop_code || bus_stop_code[0] == '\0') {
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "Bus stop code is required");
+        }
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    char url[256];
+    int url_len = snprintf(url, sizeof(url), LTA_BUS_ARRIVAL_URL, bus_stop_code);
+    if (url_len < 0 || url_len >= (int) sizeof(url)) {
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "Bus stop code is too long");
+        }
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    ESP_LOGI(TAG, "Fetching LTA bus arrivals for stop %s", bus_stop_code);
+
+    char *body = NULL;
+    int body_len = 0;
+    esp_err_t err = lta_get(url, account_key, LTA_BUS_ARRIVAL_MAX_RESPONSE, &body, &body_len,
+                            http_status_out, err_out, err_out_len);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    cJSON *json = cJSON_Parse(body);
+    free(body);
+    if (!json) {
+        ESP_LOGE(TAG, "Failed to parse LTA response JSON");
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "Failed to parse LTA response JSON");
+        }
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "LTA bus arrivals for stop %s: %d bytes", bus_stop_code, body_len);
+    *response_out = json;
+    return ESP_OK;
+}
+
+esp_err_t fetch_lta_bus_stop_name(const char *bus_stop_code, char *name, size_t name_len,
+                                  char *err_out, size_t err_out_len)
+{
+    if (!name || name_len == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    name[0] = '\0';
+    if (err_out && err_out_len > 0) {
+        err_out[0] = '\0';
+    }
+
+    if (!bus_stop_code || bus_stop_code[0] == '\0') {
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "Bus stop code is required");
+        }
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    ESP_LOGI(TAG, "Looking up the name of bus stop %s", bus_stop_code);
+
+    // LTA lists every stop LTA_BUS_STOPS_PAGE_SIZE at a time, with no way to ask for one stop
+    for (int page = 0; page < LTA_BUS_STOPS_MAX_PAGES; page++) {
+        char url[128];
+        snprintf(url, sizeof(url), LTA_BUS_STOPS_URL, page * LTA_BUS_STOPS_PAGE_SIZE);
+
+        char *body = NULL;
+        int body_len = 0;
+        esp_err_t err = lta_get(url, NULL, LTA_BUS_STOPS_MAX_RESPONSE, &body, &body_len, NULL,
+                                err_out, err_out_len);
+        if (err != ESP_OK) {
+            return err;
+        }
+
+        bool found = lta_find_bus_stop_name(body, bus_stop_code, name, name_len);
+        bool last_page = strstr(body, "\"BusStopCode\"") == NULL;
+        free(body);
+
+        if (found) {
+            ESP_LOGI(TAG, "Bus stop %s is \"%s\" (page %d)", bus_stop_code, name, page + 1);
+            return ESP_OK;
+        }
+        if (last_page) {
+            break;
+        }
+    }
+
+    ESP_LOGW(TAG, "LTA doesn't list bus stop %s", bus_stop_code);
+    if (err_out && err_out_len > 0) {
+        snprintf(err_out, err_out_len, "LTA doesn't list bus stop %s", bus_stop_code);
+    }
+    return ESP_ERR_NOT_FOUND;
 }
 
 esp_err_t fetch_and_save_image_from_url(const char *url, char *saved_image_path, size_t path_size,

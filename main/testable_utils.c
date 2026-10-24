@@ -174,6 +174,92 @@ int lta_minutes_until(const char *estimated_arrival, time_t now)
     return seconds <= 0 ? 0 : (int) (seconds / 60);
 }
 
+// Copy the string value of key from the JSON object text [object, object_end), decoding escapes.
+// \u escapes outside ASCII become '?', since the display font is ASCII only.
+static bool json_object_string(const char *object, const char *object_end, const char *key,
+                               char *out, size_t out_len)
+{
+    char quoted_key[32];
+    int key_len = snprintf(quoted_key, sizeof(quoted_key), "\"%s\"", key);
+    if (key_len < 0 || key_len >= (int) sizeof(quoted_key)) {
+        return false;
+    }
+
+    for (const char *p = object; p + key_len <= object_end; p++) {
+        if (memcmp(p, quoted_key, key_len) != 0) {
+            continue;
+        }
+
+        p += key_len;
+        while (p < object_end && isspace((unsigned char) *p)) {
+            p++;
+        }
+        if (p >= object_end || *p++ != ':') {
+            return false;
+        }
+        while (p < object_end && isspace((unsigned char) *p)) {
+            p++;
+        }
+        if (p >= object_end || *p++ != '"') {
+            return false;
+        }
+
+        size_t len = 0;
+        while (p < object_end && *p != '"') {
+            char c = *p++;
+            if (c == '\\' && p < object_end) {
+                c = *p++;
+                if (c == 'u') {
+                    unsigned int code = 0;
+                    if (object_end - p < 4 || sscanf(p, "%4x", &code) != 1) {
+                        return false;
+                    }
+                    p += 4;
+                    c = code < 0x80 ? (char) code : '?';
+                } else if (strchr("bfnrt", c)) {
+                    c = ' ';
+                }
+            }
+            if (len + 1 < out_len) {
+                out[len++] = c;
+            }
+        }
+        if (p >= object_end) {
+            return false;
+        }
+        out[len] = '\0';
+        return true;
+    }
+    return false;
+}
+
+bool lta_find_bus_stop_name(const char *json, const char *bus_stop_code, char *name,
+                            size_t name_len)
+{
+    if (!json || !bus_stop_code || !bus_stop_code[0] || !name || name_len == 0) {
+        return false;
+    }
+
+    // Each stop is a flat object, so an object holding no other object is one stop
+    for (const char *object = strchr(json, '{'); object; object = strchr(object + 1, '{')) {
+        const char *object_end = strchr(object + 1, '}');
+        if (!object_end) {
+            break;
+        }
+        const char *inner = strchr(object + 1, '{');
+        if (inner && inner < object_end) {
+            continue;
+        }
+
+        char code[16];
+        if (json_object_string(object, object_end, "BusStopCode", code, sizeof(code)) &&
+            strcmp(code, bus_stop_code) == 0) {
+            return json_object_string(object, object_end, "Description", name, name_len);
+        }
+    }
+    return false;
+}
+
 bool is_minute_in_window(int minute_of_day, int start_minutes, int end_minutes)
 {
     if (start_minutes > end_minutes) {
