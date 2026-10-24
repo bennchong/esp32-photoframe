@@ -262,6 +262,13 @@ const busWindowSummary = computed(() => {
   const start = toMinutes(settings.busTimeStart);
   const end = toMinutes(settings.busTimeEnd);
 
+  if (!settings.busEnabled) {
+    return {
+      type: "info",
+      text: "Bus arrivals are off. Turn on Enable Bus Arrivals to show them on the frame.",
+    };
+  }
+
   if (start === end) {
     return {
       type: "warning",
@@ -850,7 +857,7 @@ async function performFactoryReset() {
 
             <v-divider class="my-4" />
 
-            <v-card variant="tonal" class="mb-4">
+            <v-card variant="outlined" class="mb-4">
               <v-card-title class="text-subtitle-1">LTA Data Mall</v-card-title>
               <v-card-text>
                 <v-switch
