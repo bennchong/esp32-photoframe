@@ -121,7 +121,8 @@ static const cJSON *find_service(const cJSON *services, const char *service_no)
 // name. name is left "" when the lookup fails (retried on the next refresh) or LTA doesn't list it.
 static void load_stop_name(const bus_stop_config_t *config, char *name, size_t name_len)
 {
-    const char *number = config->number();
+    char number[BUS_STOP_NUMBER_MAX_LEN];
+    snprintf(number, sizeof(number), "%s", config->number());
     bus_stop_name_t cached = {0};
     size_t cached_len = sizeof(cached);
     nvs_handle_t nvs_handle;
@@ -228,7 +229,7 @@ esp_err_t bus_arrivals_show(void)
     display_manager_bus_stop_t stops[BUS_STOP_COUNT];
     display_manager_bus_service_t services[BUS_STOP_COUNT][DISPLAY_MANAGER_BUS_MAX_SERVICES];
     bus_row_text_t rows[BUS_STOP_COUNT][DISPLAY_MANAGER_BUS_MAX_SERVICES];
-    char names[BUS_STOP_COUNT][BUS_STOP_NAME_MAX_LEN];
+    char names[BUS_STOP_COUNT][BUS_STOP_NAME_MAX_LEN] = {0};
 
     // Names first: a first-time lookup takes a while and would leave the arrivals stale
     for (size_t i = 0; i < BUS_STOP_COUNT; i++) {

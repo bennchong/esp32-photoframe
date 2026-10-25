@@ -525,12 +525,12 @@ static esp_err_t lta_get(const char *url, const char *account_key, int max_respo
         goto cleanup;
     }
 
-    if (response_len == max_response && !esp_http_client_is_complete_data_received(client)) {
-        ESP_LOGE(TAG, "LTA response exceeds %d bytes", max_response);
+    if (!esp_http_client_is_complete_data_received(client)) {
+        ESP_LOGE(TAG, "LTA response incomplete: got %d bytes", response_len);
         if (err_out && err_out_len > 0) {
-            snprintf(err_out, err_out_len, "LTA response too large");
+            snprintf(err_out, err_out_len, "Incomplete LTA response");
         }
-        err = ESP_ERR_INVALID_SIZE;
+        err = ESP_FAIL;
         goto cleanup;
     }
 
