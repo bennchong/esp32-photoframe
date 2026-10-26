@@ -350,6 +350,46 @@ TEST(LtaMinutesUntilTest, EmptyOrMalformed)
     EXPECT_EQ(-1, lta_minutes_until("2026-13-01T00:00:00+08:00", now));
 }
 
+static const char *kBusStopsPage =
+    "{\"odata.metadata\":\"http://datamall2.mytransport.sg/ltaodataservice/$metadata#BusStops\","
+    "\"value\":["
+    "{\"BusStopCode\":\"01012\",\"RoadName\":\"Victoria St\",\"Description\":\"Hotel Grand "
+    "Pacific\",\"Latitude\":1.29684825487647,\"Longitude\":103.85253591654006},"
+    "{\"BusStopCode\": \"83139\", \"RoadName\": \"Siglap Rd\", \"Description\": \"Opp "
+    "Blk 2\\u002F3 \\\"Siglap\\\"\", \"Latitude\": 1.3, \"Longitude\": 103.9}"
+    "]}";
+
+TEST(LtaFindBusStopNameTest, FindsDescription)
+{
+    char name[48];
+    ASSERT_TRUE(lta_find_bus_stop_name(kBusStopsPage, "01012", name, sizeof(name)));
+    EXPECT_STREQ("Hotel Grand Pacific", name);
+}
+
+TEST(LtaFindBusStopNameTest, HandlesSpacingAndEscapes)
+{
+    char name[48];
+    ASSERT_TRUE(lta_find_bus_stop_name(kBusStopsPage, "83139", name, sizeof(name)));
+    EXPECT_STREQ("Opp Blk 2/3 \"Siglap\"", name);
+}
+
+TEST(LtaFindBusStopNameTest, TruncatesToFit)
+{
+    char name[6];
+    ASSERT_TRUE(lta_find_bus_stop_name(kBusStopsPage, "01012", name, sizeof(name)));
+    EXPECT_STREQ("Hotel", name);
+}
+
+TEST(LtaFindBusStopNameTest, MissingStopOrEmptyPage)
+{
+    char name[48];
+    EXPECT_FALSE(lta_find_bus_stop_name(kBusStopsPage, "99999", name, sizeof(name)));
+    EXPECT_FALSE(lta_find_bus_stop_name(kBusStopsPage, "0101", name, sizeof(name)));
+    EXPECT_FALSE(lta_find_bus_stop_name("{\"odata.metadata\":\"x\",\"value\":[]}", "01012", name,
+                                        sizeof(name)));
+    EXPECT_FALSE(lta_find_bus_stop_name(NULL, "01012", name, sizeof(name)));
+}
+
 TEST(BusWindowTest, SameDayAndOvernight)
 {
     EXPECT_TRUE(is_minute_in_window(390, 390, 570));

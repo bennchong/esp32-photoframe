@@ -51,8 +51,8 @@ export const useSettingsStore = defineStore("settings", () => {
     busServices: "",
     busStopNumber2: "",
     busServices2: "",
-    busTimeStart: "00:00",
-    busTimeEnd: "23:59",
+    busTimeStart: "07:00",
+    busTimeEnd: "09:00",
     // Home Assistant
     haUrl: "",
     // Power
@@ -213,12 +213,12 @@ export const useSettingsStore = defineStore("settings", () => {
       deviceSettings.value.busStopNumber2 = data.bus_stop_number_2 || "";
       deviceSettings.value.busServices2 = data.bus_services_2 || "";
 
-      const busTimeStartMinutes = data.bus_time_start ?? 0;
+      const busTimeStartMinutes = data.bus_time_start ?? 7 * 60;
       const busTimeStartHours = Math.floor(busTimeStartMinutes / 60);
       const busTimeStartMins = busTimeStartMinutes % 60;
       deviceSettings.value.busTimeStart = `${String(busTimeStartHours).padStart(2, "0")}:${String(busTimeStartMins).padStart(2, "0")}`;
 
-      const busTimeEndMinutes = data.bus_time_end ?? 1439;
+      const busTimeEndMinutes = data.bus_time_end ?? 9 * 60;
       const busTimeEndHours = Math.floor(busTimeEndMinutes / 60);
       const busTimeEndMins = busTimeEndMinutes % 60;
       deviceSettings.value.busTimeEnd = `${String(busTimeEndHours).padStart(2, "0")}:${String(busTimeEndMins).padStart(2, "0")}`;

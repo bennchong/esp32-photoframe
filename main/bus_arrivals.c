@@ -9,7 +9,9 @@
 #include "config.h"
 #include "config_manager.h"
 #include "display_manager.h"
+#include "esp_attr.h"
 #include "esp_log.h"
+#include "nvs.h"
 #include "testable_utils.h"
 #include "utils.h"
 
@@ -18,11 +20,13 @@ static const char *TAG = "bus_arrivals";
 typedef struct {
     const char *(*number)(void);
     const char *(*services)(void);
+    const char *name_key;  // NVS key caching the stop's name
 } bus_stop_config_t;
 
 static const bus_stop_config_t configured_stops[] = {
-    {config_manager_get_bus_stop_number, config_manager_get_bus_services},
-    {config_manager_get_bus_stop_number_2, config_manager_get_bus_services_2},
+    {config_manager_get_bus_stop_number, config_manager_get_bus_services, NVS_BUS_STOP_NAME_KEY},
+    {config_manager_get_bus_stop_number_2, config_manager_get_bus_services_2,
+     NVS_BUS_STOP_NAME_2_KEY},
 };
 
 #define BUS_STOP_COUNT (sizeof(configured_stops) / sizeof(configured_stops[0]))
@@ -36,6 +40,16 @@ typedef struct {
     char service_no[BUS_SERVICE_NO_LEN];
     char arrivals[DISPLAY_MANAGER_BUS_MAX_ARRIVALS][12];
 } bus_row_text_t;
+
+// A stop's name and the stop number it belongs to, so a changed stop number is looked up again
+typedef struct {
+    char number[BUS_STOP_NUMBER_MAX_LEN];
+    char name[BUS_STOP_NAME_MAX_LEN];
+} bus_stop_name_t;
+
+// Seconds from working out arrival times to the screen finishing its refresh, measured on the last
+// bus screen and kept across deep sleep, so the minutes shown count from when they become visible
+RTC_DATA_ATTR static int display_latency_sec = BUS_DISPLAY_LATENCY_SEC;
 
 static bool clock_is_set(const struct tm *timeinfo)
 {
@@ -103,17 +117,59 @@ static const cJSON *find_service(const cJSON *services, const char *service_no)
     return NULL;
 }
 
+// Fill name with the stop's name, looking it up from LTA only when the stop number has no cached
+// name. name is left "" when the lookup fails (retried on the next refresh) or LTA doesn't list it.
+static void load_stop_name(const bus_stop_config_t *config, char *name, size_t name_len)
+{
+    char number[BUS_STOP_NUMBER_MAX_LEN];
+    snprintf(number, sizeof(number), "%s", config->number());
+    bus_stop_name_t cached = {0};
+    size_t cached_len = sizeof(cached);
+    nvs_handle_t nvs_handle;
+
+    name[0] = '\0';
+    if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs_handle) == ESP_OK) {
+        bool hit = nvs_get_blob(nvs_handle, config->name_key, &cached, &cached_len) == ESP_OK &&
+                   cached_len == sizeof(cached) && strcmp(cached.number, number) == 0;
+        nvs_close(nvs_handle);
+        if (hit) {
+            snprintf(name, name_len, "%s", cached.name);
+            return;
+        }
+    }
+
+    char err[128];
+    memset(&cached, 0, sizeof(cached));
+    esp_err_t lookup =
+        fetch_lta_bus_stop_name(number, cached.name, sizeof(cached.name), err, sizeof(err));
+    if (lookup != ESP_OK && lookup != ESP_ERR_NOT_FOUND) {
+        ESP_LOGW(TAG, "Bus stop %s name: %s", number, err);
+        return;
+    }
+
+    // Cache "not listed" too, so an unknown stop isn't looked up on every refresh
+    snprintf(cached.number, sizeof(cached.number), "%s", number);
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle) == ESP_OK) {
+        nvs_set_blob(nvs_handle, config->name_key, &cached, sizeof(cached));
+        nvs_commit(nvs_handle);
+        nvs_close(nvs_handle);
+    }
+    snprintf(name, name_len, "%s", cached.name);
+}
+
 // Fill in one stop: the configured services in the order given (a service with no buses right
 // now keeps its row), or the first services LTA lists when none are configured
-static void load_stop(const bus_stop_config_t *config, time_t now, display_manager_bus_stop_t *stop,
-                      display_manager_bus_service_t *services, bus_row_text_t *rows)
+static void load_stop(const bus_stop_config_t *config, const char *name,
+                      display_manager_bus_stop_t *stop, display_manager_bus_service_t *services,
+                      bus_row_text_t *rows)
 {
     const char *number = config->number();
     char requested[DISPLAY_MANAGER_BUS_MAX_SERVICES][BUS_SERVICE_NO_LEN];
     int requested_count =
         parse_bus_service_list(config->services(), requested, DISPLAY_MANAGER_BUS_MAX_SERVICES);
 
-    *stop = (display_manager_bus_stop_t){.stop_id = number, .services = services};
+    *stop =
+        (display_manager_bus_stop_t){.stop_name = name, .stop_id = number, .services = services};
 
     cJSON *response = NULL;
     int http_status = 0;
@@ -124,6 +180,9 @@ static void load_stop(const bus_stop_config_t *config, time_t now, display_manag
             (http_status == 401 || http_status == 403) ? "Check LTA AccountKey" : "Can't reach LTA";
         return;
     }
+
+    // Count down to when the screen will show these times, rounding down
+    time_t shown_at = time(NULL) + display_latency_sec;
 
     const cJSON *lta_services = cJSON_GetObjectItemCaseSensitive(response, "Services");
     int count = requested_count > 0 ? requested_count : cJSON_GetArraySize(lta_services);
@@ -144,7 +203,7 @@ static void load_stop(const bus_stop_config_t *config, time_t now, display_manag
         services[i].service_no = rows[i].service_no;
         for (int j = 0; j < DISPLAY_MANAGER_BUS_MAX_ARRIVALS; j++) {
             format_arrival(rows[i].arrivals[j], sizeof(rows[i].arrivals[j]), service,
-                           next_bus_keys[j], now);
+                           next_bus_keys[j], shown_at);
             services[i].arrivals[j] = rows[i].arrivals[j];
         }
     }
@@ -170,13 +229,21 @@ esp_err_t bus_arrivals_show(void)
     display_manager_bus_stop_t stops[BUS_STOP_COUNT];
     display_manager_bus_service_t services[BUS_STOP_COUNT][DISPLAY_MANAGER_BUS_MAX_SERVICES];
     bus_row_text_t rows[BUS_STOP_COUNT][DISPLAY_MANAGER_BUS_MAX_SERVICES];
-    size_t stop_count = 0;
+    char names[BUS_STOP_COUNT][BUS_STOP_NAME_MAX_LEN] = {0};
 
+    // Names first: a first-time lookup takes a while and would leave the arrivals stale
+    for (size_t i = 0; i < BUS_STOP_COUNT; i++) {
+        if (configured_stops[i].number()[0] != '\0') {
+            load_stop_name(&configured_stops[i], names[i], sizeof(names[i]));
+        }
+    }
+
+    size_t stop_count = 0;
     for (size_t i = 0; i < BUS_STOP_COUNT; i++) {
         if (configured_stops[i].number()[0] == '\0') {
             continue;
         }
-        load_stop(&configured_stops[i], now, &stops[stop_count], services[stop_count],
+        load_stop(&configured_stops[i], names[i], &stops[stop_count], services[stop_count],
                   rows[stop_count]);
         stop_count++;
     }
@@ -191,5 +258,14 @@ esp_err_t bus_arrivals_show(void)
     };
 
     ESP_LOGI(TAG, "Showing bus arrivals for %zu stop(s)", stop_count);
-    return display_manager_show_bus_timing_screen(&screen);
+    time_t worked_out_at = time(NULL);
+    esp_err_t err = display_manager_show_bus_timing_screen(&screen);
+    if (err == ESP_OK) {
+        int latency = (int) (time(NULL) - worked_out_at);
+        if (latency >= 0 && latency <= BUS_REFRESH_INTERVAL_SEC) {
+            display_latency_sec = latency;
+        }
+        ESP_LOGI(TAG, "Bus screen took %d s to appear", latency);
+    }
+    return err;
 }
