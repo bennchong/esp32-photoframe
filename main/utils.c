@@ -535,6 +535,14 @@ static esp_err_t lta_get(const char *url, const char *account_key, int max_respo
     }
 
     response_buffer[response_len] = '\0';
+    if (!esp_http_client_is_complete_data_received(client)) {
+        if (err_out && err_out_len > 0) {
+            snprintf(err_out, err_out_len, "Incomplete LTA response");
+        }
+        err = ESP_FAIL;
+        goto cleanup;
+    }
+
     *body_out = response_buffer;
     *body_len_out = response_len;
     response_buffer = NULL;
