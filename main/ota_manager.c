@@ -174,7 +174,11 @@ static esp_err_t fetch_github_release_info(char *latest_version, size_t version_
     }
     if (status_code != 200) {
         ESP_LOGE(TAG, "HTTP GET failed, status = %d", status_code);
-        snprintf(err_out, err_out_len, "GitHub returned HTTP %d", status_code);
+        if (status_code <= 0) {
+            snprintf(err_out, err_out_len, "Couldn't reach GitHub");
+        } else {
+            snprintf(err_out, err_out_len, "GitHub returned HTTP %d", status_code);
+        }
         err = ESP_FAIL;
         goto cleanup;
     }
