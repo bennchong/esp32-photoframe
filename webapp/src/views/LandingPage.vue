@@ -5,6 +5,7 @@ import { useSettingsStore } from "../stores";
 import ImageProcessing from "../components/ImageProcessing.vue";
 import ProcessingControls from "../components/ProcessingControls.vue";
 import boardsData from "../../../boards/boards.json";
+import { FIRMWARE_LATEST_RELEASE_API } from "../firmwareRelease";
 
 const settingsStore = useSettingsStore();
 // Default demo to landscape — the taipei101 sample image is landscape
@@ -165,11 +166,10 @@ watch(selectedBoard, () => loadVersionInfo());
 
 async function loadVersionInfo() {
   try {
-    const stableResponse = await fetch(
-      "https://api.github.com/repos/aitjcize/esp32-photoframe/releases/latest"
-    );
-    const stableData = await stableResponse.json();
-    stableVersion.value = stableData.tag_name;
+    // 404 until a release is published (drafts don't count)
+    const stableResponse = await fetch(FIRMWARE_LATEST_RELEASE_API);
+    const stableData = stableResponse.ok ? await stableResponse.json() : {};
+    stableVersion.value = stableData.tag_name || "unknown";
 
     let devResponse = await fetch(baseUrl + selectedBoard.value + "/manifest-dev.json");
     if (!devResponse.ok) {

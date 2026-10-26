@@ -25,33 +25,17 @@ import subprocess
 import sys
 import urllib.request
 
+# Firmware releases are published here rather than to this repository
+FIRMWARE_REPO = "bennchong/frameway-firmware"
+
 
 def get_latest_github_release():
     """Get the latest release version from GitHub API."""
     try:
-        # Try to get repository from git remote
-        result = subprocess.run(
-            ["git", "config", "--get", "remote.origin.url"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-
-        if result.returncode == 0:
-            # Parse GitHub repo from URL
-            remote_url = result.stdout.strip()
-            if "github.com" in remote_url:
-                # Extract owner/repo
-                if remote_url.startswith("git@"):
-                    repo_path = remote_url.split("github.com:")[1].replace(".git", "")
-                else:
-                    repo_path = remote_url.split("github.com/")[1].replace(".git", "")
-
-                # Fetch latest release from GitHub API
-                api_url = f"https://api.github.com/repos/{repo_path}/releases/latest"
-                with urllib.request.urlopen(api_url, timeout=5) as response:
-                    data = json.loads(response.read())
-                    return data["tag_name"]
+        api_url = f"https://api.github.com/repos/{FIRMWARE_REPO}/releases/latest"
+        with urllib.request.urlopen(api_url, timeout=5) as response:
+            data = json.loads(response.read())
+            return data["tag_name"]
     except Exception as e:
         print(f"Warning: Could not fetch from GitHub API: {e}", file=sys.stderr)
 
