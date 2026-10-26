@@ -128,8 +128,11 @@ static esp_err_t http_event_handler(esp_http_client_event_t *evt)
     return ESP_OK;
 }
 
+// Fetch the latest published release from GITHUB_API_URL. On failure, err_out receives the reason
+// to show in the webapp.
 static esp_err_t fetch_github_release_info(char *latest_version, size_t version_len,
-                                           char *download_url, size_t url_len)
+                                           char *download_url, size_t url_len, char *err_out,
+                                           size_t err_out_len)
 {
     esp_err_t err = ESP_FAIL;
     char *response_buffer = NULL;
@@ -155,14 +158,27 @@ static esp_err_t fetch_github_release_info(char *latest_version, size_t version_
     err = esp_http_client_open(client, 0);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
+        snprintf(err_out, err_out_len, "Couldn't reach GitHub");
         goto cleanup;
     }
 
     int content_length = esp_http_client_fetch_headers(client);
     int status_code = esp_http_client_get_status_code(client);
 
+    if (status_code == 404) {
+        // releases/latest skips drafts and pre-releases
+        ESP_LOGW(TAG, "No published release at %s", GITHUB_API_URL);
+        snprintf(err_out, err_out_len, "No firmware release has been published yet");
+        err = ESP_ERR_NOT_FOUND;
+        goto cleanup;
+    }
     if (status_code != 200) {
         ESP_LOGE(TAG, "HTTP GET failed, status = %d", status_code);
+        if (status_code <= 0) {
+            snprintf(err_out, err_out_len, "Couldn't reach GitHub");
+        } else {
+            snprintf(err_out, err_out_len, "GitHub returned HTTP %d", status_code);
+        }
         err = ESP_FAIL;
         goto cleanup;
     }
@@ -253,6 +269,8 @@ static esp_err_t fetch_github_release_info(char *latest_version, size_t version_
 
     if (!found_binary) {
         ESP_LOGE(TAG, "No .bin file found in release assets");
+        snprintf(err_out, err_out_len, "Release %s has no firmware for %s", latest_version,
+                 BOARD_HAL_NAME);
         err = ESP_FAIL;
         goto cleanup;
     }
@@ -281,13 +299,14 @@ static void ota_check_task(void *pvParameter)
 
     char latest_version[32] = {0};
     char download_url[256] = {0};
+    char error_msg[96] = "Failed to check for updates";
 
     esp_err_t err = fetch_github_release_info(latest_version, sizeof(latest_version), download_url,
-                                              sizeof(download_url));
+                                              sizeof(download_url), error_msg, sizeof(error_msg));
 
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to fetch release info");
-        set_ota_state(OTA_STATE_ERROR, "Failed to check for updates");
+        set_ota_state(OTA_STATE_ERROR, error_msg);
         vTaskDelete(NULL);
         return;
     }

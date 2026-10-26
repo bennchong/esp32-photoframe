@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from "vue";
+import { FIRMWARE_RELEASES_URL } from "../firmwareRelease";
 
 const currentVersion = ref("Loading...");
 const latestVersion = ref("-");
@@ -156,7 +157,8 @@ onUnmounted(() => {
 
     <v-card-text>
       <p class="text-body-2 text-grey mb-4">
-        Check for and install firmware updates from GitHub releases.
+        Check for and install firmware updates from
+        <a :href="FIRMWARE_RELEASES_URL" target="_blank" rel="noopener">GitHub releases</a>.
       </p>
 
       <v-row align="center">
