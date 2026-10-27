@@ -99,8 +99,7 @@ static void qr_draw_callback(esp_qrcode_handle_t qrcode)
         }
     }
 
-    // Use fractional module size so the QR content fills target_size exactly,
-    // matching how the SVG app QR is rendered with fractional scaling.
+    // Use fractional module size so the QR content fills target_size exactly
     float module_f = (float) ctx->target_size / qr_size;
 
     for (int qy = 0; qy < qr_size; qy++) {

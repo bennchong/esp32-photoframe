@@ -69,7 +69,6 @@ jobs:
 
     - name: Install splash screen system dependencies
       run: |
-        pip install qrcode
         sudo apt-get update && sudo apt-get install -y librsvg2-bin
 
     - name: Generate splash screen
