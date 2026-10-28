@@ -9,7 +9,6 @@ Currently generates two variants:
   - 1200x1600 (portrait: XIAO EE02)
 
 Dependencies:
-  pip install qrcode
   rsvg-convert (librsvg2-bin on Ubuntu, librsvg on macOS)
   node + process-cli (npm ci in process-cli/)
 """
@@ -21,17 +20,19 @@ import subprocess
 import sys
 import tempfile
 
-try:
-    import qrcode
-except ImportError:
-    print("Install qrcode: pip install qrcode")
-    sys.exit(1)
+# FrameWay brand colours
+BACKGROUND_COLOR = "#809178"  # sage green
+FOREGROUND_COLOR = "#ffffff"
 
-# App download URL
-APP_URL = "https://bennchong.github.io/esp32-photoframe/#companion-app"
-
-# QR code module size in SVG units
-QR_MODULE_SIZE = 4
+# FrameWay mark in a 512x512 box: a frame left open at the bottom right, where a leaf sits
+MARK_FRAME_PATH = (
+    "M 221 405 H 147 Q 117 405 117 375 V 137 Q 117 107 147 108.7 "
+    "L 335 119.3 Q 365 121 365 151 V 225"
+)
+MARK_FRAME_STROKE = 42
+MARK_LEAF_PATH = (
+    "M 241 426 C 247 310 299.2 256.9 415 249 C 409 364.9 356.8 418 241 426 Z"
+)
 
 # Screen size variants to generate
 SCREEN_SIZES = {
@@ -47,8 +48,7 @@ LAYOUT = {
         "title_size": 0.06,  # title font size (fraction of height)
         "subtitle_size": 0.035,  # subtitle font size (fraction of height)
         "qr_y": 0.62,  # QR code top edge (fraction of height)
-        "qr_size": 0.15,  # QR code size (fraction of width, capped by height)
-        "qr_spacing": 0.30,  # distance between QR centers (fraction of width)
+        "qr_size": 0.195,  # QR code size (fraction of min(width, height))
     },
     "portrait": {
         "icon_y": 0.30,  # icon vertical center (fraction of height)
@@ -56,8 +56,7 @@ LAYOUT = {
         "title_size": 0.035,  # title font size (fraction of height)
         "subtitle_size": 0.016,  # subtitle font size (fraction of height)
         "qr_y": 0.55,  # QR code top edge (fraction of height)
-        "qr_size": 0.15,  # QR code size (fraction of width, capped by height)
-        "qr_spacing": 0.20,  # gap between QR codes (fraction of width)
+        "qr_size": 0.195,  # QR code size (fraction of min(width, height))
     },
 }
 
@@ -65,133 +64,75 @@ LAYOUT = {
 PROCESS_CLI = os.path.join(os.path.dirname(__file__), "..", "process-cli", "cli.js")
 
 
-def generate_qr_svg_path(data: str, module_size: int = QR_MODULE_SIZE) -> tuple:
-    """Generate QR code as SVG path data. Returns (path_d, qr_pixel_size)."""
-    qr = qrcode.QRCode(
-        version=None,
-        error_correction=qrcode.constants.ERROR_CORRECT_M,
-        box_size=1,
-        border=0,
-    )
-    qr.add_data(data)
-    qr.make(fit=True)
-    matrix = qr.get_matrix()
-    size = len(matrix)
-
-    path_parts = []
-    for y, row in enumerate(matrix):
-        for x, cell in enumerate(row):
-            if cell:
-                px = x * module_size
-                py = y * module_size
-                path_parts.append(
-                    f"M{px},{py}h{module_size}v{module_size}h-{module_size}z"
-                )
-
-    return " ".join(path_parts), size * module_size
-
-
-def generate_splash_svg(width: int, height: int) -> tuple:
-    """Generate splash screen SVG. Returns (svg_content, wifi_qr_x, wifi_qr_y, wifi_qr_size)."""
+def generate_screen_svg(
+    width: int, height: int, title: str, subtitle: str, qr_label: str
+) -> tuple:
+    """Generate a screen SVG with the FrameWay mark, a title and a single centered QR
+    placeholder that the firmware fills at runtime.
+    Returns (svg_content, qr_x, qr_y, qr_size)."""
     is_landscape = width > height
-
-    # Generate app QR code
-    app_qr_path, app_qr_size = generate_qr_svg_path(APP_URL)
-
     L = LAYOUT["landscape" if is_landscape else "portrait"]
 
     icon_scale = min(width, height) * L["icon_size"]
     icon_x = width / 2
     icon_y = height * L["icon_y"]
 
-    qr_scale = min(width * L["qr_size"], height * L["qr_size"]) / app_qr_size
-    qr_y = height * L["qr_y"]
-
-    if is_landscape:
-        # QR codes positioned symmetrically around center
-        half_spacing = width * L["qr_spacing"] / 2
-        wifi_qr_x = width / 2 - half_spacing - (app_qr_size * qr_scale) / 2
-        app_qr_x = width / 2 + half_spacing - (app_qr_size * qr_scale) / 2
-    else:
-        # QR codes with explicit gap between them
-        gap = width * L["qr_spacing"]
-        total_qr_width = 2 * app_qr_size * qr_scale + gap
-        wifi_qr_x = (width - total_qr_width) / 2
-        app_qr_x = wifi_qr_x + app_qr_size * qr_scale + gap
-
-    label_y = qr_y + app_qr_size * qr_scale + height * (0.06 if is_landscape else 0.03)
-    label_size = max(12, height * (0.030 if is_landscape else 0.018))
     title_y = icon_y + icon_scale * 0.55
     title_size = max(18, height * L["title_size"])
     subtitle_size = max(10, height * L["subtitle_size"])
 
-    # WiFi QR placeholder dimensions
-    wifi_placeholder_size = int(app_qr_size * qr_scale)
-    wifi_placeholder_x = int(wifi_qr_x)
-    wifi_placeholder_y = int(qr_y)
+    qr_size = int(min(width, height) * L["qr_size"])
+    qr_x = (width - qr_size) // 2
+    qr_y = int(height * L["qr_y"])
 
-    # Build SVG
+    label_y = qr_y + qr_size + height * (0.06 if is_landscape else 0.03)
+    label_size = max(12, height * (0.030 if is_landscape else 0.018))
+
+    # Text is solid rather than translucent, and small text is semibold, so it stays
+    # readable once the background is dithered
     svg = f"""<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" height="{height}">
-  <defs>
-    <linearGradient id="bg">
-      <stop offset="0%" stop-color="#5a3a20"/>
-      <stop offset="100%" stop-color="#5a3a20"/>
-    </linearGradient>
-    <linearGradient id="pic-bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#f4c896"/>
-      <stop offset="100%" stop-color="#e9b584"/>
-    </linearGradient>
-    <linearGradient id="frame-body" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#faf5eb"/>
-      <stop offset="100%" stop-color="#f0e4d0"/>
-    </linearGradient>
-  </defs>
+  <!-- Background -->
+  <rect x="0" y="0" width="{width}" height="{height}" fill="{BACKGROUND_COLOR}"/>
 
-  <!-- Gradient background -->
-  <rect x="0" y="0" width="{width}" height="{height}" fill="url(#bg)"/>
-
-  <!-- PhotoFrame icon -->
+  <!-- FrameWay mark -->
   <g transform="translate({icon_x - icon_scale * 0.5}, {icon_y - icon_scale * 0.5}) scale({icon_scale / 512})">
-    <rect x="96" y="112" width="320" height="288" rx="20" fill="url(#frame-body)"/>
-    <rect x="120" y="136" width="272" height="240" rx="8" fill="url(#pic-bg)"/>
-    <circle cx="328" cy="200" r="28" fill="#fef3c7" fill-opacity="0.95"/>
-    <path d="M 120 320 Q 200 260 280 300 Q 340 320 392 306 L 392 376 L 120 376 Z"
-          fill="#8b5a3c" fill-opacity="0.7"/>
-    <path d="M 120 350 Q 180 320 240 336 Q 320 360 392 344 L 392 376 L 120 376 Z"
-          fill="#4a3423" fill-opacity="0.85"/>
-    <rect x="236" y="400" width="40" height="12" rx="4" fill="#faf5eb" fill-opacity="0.9"/>
+    <path d="{MARK_FRAME_PATH}" fill="none" stroke="{FOREGROUND_COLOR}"
+          stroke-width="{MARK_FRAME_STROKE}" stroke-linejoin="round"/>
+    <path d="{MARK_LEAF_PATH}" fill="{FOREGROUND_COLOR}"/>
   </g>
 
   <!-- Title -->
   <text x="{width / 2}" y="{title_y + title_size * 1.2}" text-anchor="middle"
         font-family="sans-serif" font-size="{title_size}" font-weight="600"
-        fill="#f0e4d0">ESP Frame</text>
+        fill="{FOREGROUND_COLOR}">{title}</text>
   <text x="{width / 2}" y="{title_y + title_size * 1.5 + subtitle_size * 1.8}" text-anchor="middle"
-        font-family="sans-serif" font-size="{subtitle_size}"
-        fill="#f0e4d0" fill-opacity="0.6">Free and open source ecosystem for ESP32-based e-paper photo frames</text>
+        font-family="sans-serif" font-size="{subtitle_size}" font-weight="600"
+        fill="{FOREGROUND_COLOR}">{subtitle}</text>
 
-  <!-- WiFi QR code placeholder (white background) -->
-  <rect x="{wifi_placeholder_x - 4}" y="{wifi_placeholder_y - 4}"
-        width="{wifi_placeholder_size + 8}" height="{wifi_placeholder_size + 8}"
+  <!-- QR code placeholder (white background, firmware fills at runtime) -->
+  <rect x="{qr_x - 4}" y="{qr_y - 4}"
+        width="{qr_size + 8}" height="{qr_size + 8}"
         rx="4" fill="white"/>
-  <text x="{wifi_placeholder_x + wifi_placeholder_size / 2}" y="{label_y}"
-        text-anchor="middle" font-family="sans-serif" font-size="{label_size}"
-        fill="#f0e4d0" fill-opacity="0.8">Scan to connect WiFi</text>
-
-  <!-- App download QR code -->
-  <rect x="{int(app_qr_x) - 4}" y="{int(qr_y) - 4}"
-        width="{wifi_placeholder_size + 8}" height="{wifi_placeholder_size + 8}"
-        rx="4" fill="white"/>
-  <g transform="translate({int(app_qr_x)}, {int(qr_y)}) scale({qr_scale})">
-    <path d="{app_qr_path}" fill="black"/>
-  </g>
-  <text x="{int(app_qr_x) + wifi_placeholder_size / 2}" y="{label_y}"
-        text-anchor="middle" font-family="sans-serif" font-size="{label_size}"
-        fill="#f0e4d0" fill-opacity="0.8">Scan to download app</text>
+  <text x="{width / 2}" y="{label_y}"
+        text-anchor="middle" font-family="sans-serif" font-size="{label_size}" font-weight="600"
+        fill="{FOREGROUND_COLOR}">{qr_label}</text>
 
 </svg>"""
-    return svg, wifi_placeholder_x, wifi_placeholder_y, wifi_placeholder_size
+    return svg, qr_x, qr_y, qr_size
+
+
+def generate_splash_svg(width: int, height: int) -> tuple:
+    """Generate splash screen SVG. Returns (svg_content, wifi_qr_x, wifi_qr_y, wifi_qr_size)."""
+    # Bold "Frame" and regular "Way", as in the FrameWay wordmark
+    title = '<tspan font-weight="700">Frame</tspan><tspan font-weight="400">Way</tspan>'
+    return generate_screen_svg(
+        width,
+        height,
+        title,
+        "Your Life, at a Glance",
+        "Scan to connect WiFi",
+    )
 
 
 def svg_to_png(svg_path: str, png_path: str, width: int, height: int) -> bool:
@@ -257,78 +198,14 @@ def png_to_epdgz(png_path: str, output_dir: str, width: int, height: int) -> boo
 
 
 def generate_setup_complete_svg(width: int, height: int) -> tuple:
-    """Generate setup-complete screen SVG with a single centered QR placeholder.
-    Returns (svg_content, qr_x, qr_y, qr_size)."""
-    is_landscape = width > height
-    L = LAYOUT["landscape" if is_landscape else "portrait"]
-
-    icon_scale = min(width, height) * L["icon_size"]
-    icon_x = width / 2
-    icon_y = height * L["icon_y"]
-
-    title_y = icon_y + icon_scale * 0.55
-    title_size = max(18, height * L["title_size"])
-    subtitle_size = max(10, height * L["subtitle_size"])
-
-    # Single centered QR code, slightly larger than the OOBE ones
-    qr_target = min(width, height) * L["qr_size"] * 1.3
-    qr_x = int((width - qr_target) / 2)
-    qr_y_pos = int(height * L["qr_y"])
-    qr_size = int(qr_target)
-
-    label_y = qr_y_pos + qr_size + height * (0.06 if is_landscape else 0.03)
-    label_size = max(12, height * (0.030 if is_landscape else 0.018))
-
-    svg = f"""<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" height="{height}">
-  <defs>
-    <linearGradient id="bg">
-      <stop offset="0%" stop-color="#5a3a20"/>
-      <stop offset="100%" stop-color="#5a3a20"/>
-    </linearGradient>
-    <linearGradient id="pic-bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#f4c896"/>
-      <stop offset="100%" stop-color="#e9b584"/>
-    </linearGradient>
-    <linearGradient id="frame-body" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#faf5eb"/>
-      <stop offset="100%" stop-color="#f0e4d0"/>
-    </linearGradient>
-  </defs>
-
-  <!-- Background -->
-  <rect x="0" y="0" width="{width}" height="{height}" fill="url(#bg)"/>
-
-  <!-- PhotoFrame icon -->
-  <g transform="translate({icon_x - icon_scale * 0.5}, {icon_y - icon_scale * 0.5}) scale({icon_scale / 512})">
-    <rect x="96" y="112" width="320" height="288" rx="20" fill="url(#frame-body)"/>
-    <rect x="120" y="136" width="272" height="240" rx="8" fill="url(#pic-bg)"/>
-    <circle cx="328" cy="200" r="28" fill="#fef3c7" fill-opacity="0.95"/>
-    <path d="M 120 320 Q 200 260 280 300 Q 340 320 392 306 L 392 376 L 120 376 Z"
-          fill="#8b5a3c" fill-opacity="0.7"/>
-    <path d="M 120 350 Q 180 320 240 336 Q 320 360 392 344 L 392 376 L 120 376 Z"
-          fill="#4a3423" fill-opacity="0.85"/>
-    <rect x="236" y="400" width="40" height="12" rx="4" fill="#faf5eb" fill-opacity="0.9"/>
-  </g>
-
-  <!-- Title -->
-  <text x="{width / 2}" y="{title_y + title_size * 1.2}" text-anchor="middle"
-        font-family="sans-serif" font-size="{title_size}" font-weight="600"
-        fill="#f0e4d0">Setup Complete!</text>
-  <text x="{width / 2}" y="{title_y + title_size * 1.5 + subtitle_size * 1.8}" text-anchor="middle"
-        font-family="sans-serif" font-size="{subtitle_size}"
-        fill="#f0e4d0" fill-opacity="0.6">Scan the QR code or use the app to get started</text>
-
-  <!-- QR code placeholder (white background, firmware fills at runtime) -->
-  <rect x="{qr_x - 4}" y="{qr_y_pos - 4}"
-        width="{qr_size + 8}" height="{qr_size + 8}"
-        rx="4" fill="white"/>
-  <text x="{width / 2}" y="{label_y}"
-        text-anchor="middle" font-family="sans-serif" font-size="{label_size}"
-        fill="#f0e4d0" fill-opacity="0.8">Scan to open web interface</text>
-
-</svg>"""
-    return svg, qr_x, qr_y_pos, qr_size
+    """Generate setup-complete screen SVG. Returns (svg_content, qr_x, qr_y, qr_size)."""
+    return generate_screen_svg(
+        width,
+        height,
+        "Setup Complete!",
+        "Scan the QR code to get started",
+        "Scan to open web interface",
+    )
 
 
 def generate_meta_header(
